@@ -1,0 +1,42 @@
+21:39:17 **** Incremental Build of configuration Debug for project test ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_NUCLEO_64 -DUSE_HAL_DRIVER -DSTM32G431xx -c -I../Core/Inc -I../Drivers/STM32G4xx_HAL_Driver/Inc -I../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I../Drivers/BSP/STM32G4xx_Nucleo -I../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+../Core/Src/main.c:55:16: warning: 'tx_buffer' defined but not used [-Wunused-variable]
+   55 | static uint8_t tx_buffer[1000];
+      |                ^~~~~~~~~
+../Core/Src/main.c:54:24: warning: 'rst' defined but not used [-Wunused-variable]
+   54 | static uint8_t whoamI, rst;
+      |                        ^~~
+../Core/Src/main.c:54:16: warning: 'whoamI' defined but not used [-Wunused-variable]
+   54 | static uint8_t whoamI, rst;
+      |                ^~~~~~
+../Core/Src/main.c:53:16: warning: 'angular_rate_mdps' defined but not used [-Wunused-variable]
+   53 | static float_t angular_rate_mdps[3];
+      |                ^~~~~~~~~~~~~~~~~
+../Core/Src/main.c:52:16: warning: 'acceleration_mg' defined but not used [-Wunused-variable]
+   52 | static float_t acceleration_mg[3];
+      |                ^~~~~~~~~~~~~~~
+../Core/Src/main.c:51:16: warning: 'data_raw_angular_rate' defined but not used [-Wunused-variable]
+   51 | static int16_t data_raw_angular_rate[3];
+      |                ^~~~~~~~~~~~~~~~~~~~~
+../Core/Src/main.c:50:16: warning: 'data_raw_acceleration' defined but not used [-Wunused-variable]
+   50 | static int16_t data_raw_acceleration[3];
+      |                ^~~~~~~~~~~~~~~~~~~~~
+arm-none-eabi-g++ -o "test.elf" @"objects.list"   -mcpu=cortex-m4 -T"C:\Users\thepd\STM32CubeIDE\to_stm_base_proj_added_i2c\test\STM32G431RBTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="test.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -lstdc++ -lsupc++ -Wl,--end-group
+Finished building target: test.elf
+ 
+arm-none-eabi-size  test.elf 
+arm-none-eabi-objdump -h -S test.elf  > "test.list"
+   text	   data	    bss	    dec	    hex	filename
+  17024	    124	   2172	  19320	   4b78	test.elf
+Finished building: default.size.stdout
+ 
+Finished building: test.list
+ 
+21:39:29 **** Incremental Build of configuration Debug for project test ****
+make -j8 all 
+arm-none-eabi-size  test.elf 
+   text	   data	    bss	    dec	    hex	filename
+  17024	    124	   2172	  19320	   4b78	test.elf
+Finished building: default.size.stdout
+ 
