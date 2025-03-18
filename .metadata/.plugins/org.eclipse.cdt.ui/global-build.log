@@ -40,3 +40,220 @@ arm-none-eabi-size  test.elf
   17024	    124	   2172	  19320	   4b78	test.elf
 Finished building: default.size.stdout
  
+13:04:49 **** Incremental Build of configuration Debug for project test ****
+make -j8 all 
+arm-none-eabi-size  test.elf 
+   text	   data	    bss	    dec	    hex	filename
+  17024	    124	   2172	  19320	   4b78	test.elf
+Finished building: default.size.stdout
+ 
+13:04:56 **** Incremental Build of configuration Debug for project test ****
+make -j8 all 
+arm-none-eabi-size  test.elf 
+   text	   data	    bss	    dec	    hex	filename
+  17024	    124	   2172	  19320	   4b78	test.elf
+Finished building: default.size.stdout
+ 
+13:19:25 **** Incremental Build of configuration Debug for project test ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_NUCLEO_64 -DUSE_HAL_DRIVER -DSTM32G431xx -c -I../Core/Inc -I../Drivers/STM32G4xx_HAL_Driver/Inc -I../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I../Drivers/BSP/STM32G4xx_Nucleo -I../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+../Core/Src/main.c: In function 'main':
+../Core/Src/main.c:220:15: error: 'message' undeclared (first use in this function)
+  220 |       sprintf(message, "Accel [ug]: X=%ld, Y=%ld, Z=%ld\n\r",
+      |               ^~~~~~~
+../Core/Src/main.c:220:15: note: each undeclared identifier is reported only once for each function it appears in
+../Core/Src/main.c:222:26: error: 'huart2' undeclared (first use in this function)
+  222 |       HAL_UART_Transmit(&huart2, (uint8_t *)message, strlen(message), HAL_MAX_DELAY);
+      |                          ^~~~~~
+../Core/Src/main.c:222:54: warning: implicit declaration of function 'strlen' [-Wimplicit-function-declaration]
+  222 |       HAL_UART_Transmit(&huart2, (uint8_t *)message, strlen(message), HAL_MAX_DELAY);
+      |                                                      ^~~~~~
+../Core/Src/main.c:27:1: note: include '<string.h>' or provide a declaration of 'strlen'
+   26 | #include "lsm6dso32x_reg.h"
+  +++ |+#include <string.h>
+   27 | /* USER CODE END Includes */
+../Core/Src/main.c:222:54: warning: incompatible implicit declaration of built-in function 'strlen' [-Wbuiltin-declaration-mismatch]
+  222 |       HAL_UART_Transmit(&huart2, (uint8_t *)message, strlen(message), HAL_MAX_DELAY);
+      |                                                      ^~~~~~
+../Core/Src/main.c:222:54: note: include '<string.h>' or provide a declaration of 'strlen'
+../Core/Src/main.c: At top level:
+../Core/Src/main.c:74:16: warning: 'tx_buffer' defined but not used [-Wunused-variable]
+   74 | static uint8_t tx_buffer[1000];
+      |                ^~~~~~~~~
+../Core/Src/main.c:73:24: warning: 'rst' defined but not used [-Wunused-variable]
+   73 | static uint8_t whoamI, rst;
+      |                        ^~~
+../Core/Src/main.c:73:16: warning: 'whoamI' defined but not used [-Wunused-variable]
+   73 | static uint8_t whoamI, rst;
+      |                ^~~~~~
+../Core/Src/main.c:72:16: warning: 'angular_rate_mdps' defined but not used [-Wunused-variable]
+   72 | static float_t angular_rate_mdps[3];
+      |                ^~~~~~~~~~~~~~~~~
+../Core/Src/main.c:71:16: warning: 'acceleration_mg' defined but not used [-Wunused-variable]
+   71 | static float_t acceleration_mg[3];
+      |                ^~~~~~~~~~~~~~~
+../Core/Src/main.c:70:16: warning: 'data_raw_angular_rate' defined but not used [-Wunused-variable]
+   70 | static int16_t data_raw_angular_rate[3];
+      |                ^~~~~~~~~~~~~~~~~~~~~
+../Core/Src/main.c:69:16: warning: 'data_raw_acceleration' defined but not used [-Wunused-variable]
+   69 | static int16_t data_raw_acceleration[3];
+      |                ^~~~~~~~~~~~~~~~~~~~~
+make: *** [Core/Src/subdir.mk:43: Core/Src/main.o] Error 1
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+13:23:11 **** Incremental Build of configuration Debug for project test ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_NUCLEO_64 -DUSE_HAL_DRIVER -DSTM32G431xx -c -I../Core/Inc -I../Drivers/STM32G4xx_HAL_Driver/Inc -I../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I../Drivers/BSP/STM32G4xx_Nucleo -I../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+../Core/Src/main.c: In function 'main':
+../Core/Src/main.c:223:26: error: 'huart2' undeclared (first use in this function)
+  223 |       HAL_UART_Transmit(&huart2, (uint8_t *)message, strlen(message), HAL_MAX_DELAY);
+      |                          ^~~~~~
+../Core/Src/main.c:223:26: note: each undeclared identifier is reported only once for each function it appears in
+../Core/Src/main.c:223:54: warning: implicit declaration of function 'strlen' [-Wimplicit-function-declaration]
+  223 |       HAL_UART_Transmit(&huart2, (uint8_t *)message, strlen(message), HAL_MAX_DELAY);
+      |                                                      ^~~~~~
+../Core/Src/main.c:27:1: note: include '<string.h>' or provide a declaration of 'strlen'
+   26 | #include "lsm6dso32x_reg.h"
+  +++ |+#include <string.h>
+   27 | /* USER CODE END Includes */
+../Core/Src/main.c:223:54: warning: incompatible implicit declaration of built-in function 'strlen' [-Wbuiltin-declaration-mismatch]
+  223 |       HAL_UART_Transmit(&huart2, (uint8_t *)message, strlen(message), HAL_MAX_DELAY);
+      |                                                      ^~~~~~
+../Core/Src/main.c:223:54: note: include '<string.h>' or provide a declaration of 'strlen'
+../Core/Src/main.c: At top level:
+../Core/Src/main.c:74:16: warning: 'tx_buffer' defined but not used [-Wunused-variable]
+   74 | static uint8_t tx_buffer[1000];
+      |                ^~~~~~~~~
+../Core/Src/main.c:73:24: warning: 'rst' defined but not used [-Wunused-variable]
+   73 | static uint8_t whoamI, rst;
+      |                        ^~~
+../Core/Src/main.c:73:16: warning: 'whoamI' defined but not used [-Wunused-variable]
+   73 | static uint8_t whoamI, rst;
+      |                ^~~~~~
+../Core/Src/main.c:72:16: warning: 'angular_rate_mdps' defined but not used [-Wunused-variable]
+   72 | static float_t angular_rate_mdps[3];
+      |                ^~~~~~~~~~~~~~~~~
+../Core/Src/main.c:71:16: warning: 'acceleration_mg' defined but not used [-Wunused-variable]
+   71 | static float_t acceleration_mg[3];
+      |                ^~~~~~~~~~~~~~~
+../Core/Src/main.c:70:16: warning: 'data_raw_angular_rate' defined but not used [-Wunused-variable]
+   70 | static int16_t data_raw_angular_rate[3];
+      |                ^~~~~~~~~~~~~~~~~~~~~
+../Core/Src/main.c:69:16: warning: 'data_raw_acceleration' defined but not used [-Wunused-variable]
+   69 | static int16_t data_raw_acceleration[3];
+      |                ^~~~~~~~~~~~~~~~~~~~~
+make: *** [Core/Src/subdir.mk:43: Core/Src/main.o] Error 1
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+13:25:14 **** Incremental Build of configuration Debug for project test ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_NUCLEO_64 -DUSE_HAL_DRIVER -DSTM32G431xx -c -I../Core/Inc -I../Drivers/STM32G4xx_HAL_Driver/Inc -I../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I../Drivers/BSP/STM32G4xx_Nucleo -I../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+../Core/Src/main.c: In function 'main':
+../Core/Src/main.c:235:21: warning: passing argument 2 of 'sprintf' makes pointer from integer without a cast [-Wint-conversion]
+  235 |                     gyro_mdps_x, gyro_mdps_y, gyro_mdps_z);
+      |                     ^~~~~~~~~~~
+      |                     |
+      |                     int32_t {aka long int}
+In file included from ../Core/Inc/main.h:32,
+                 from ../Core/Src/main.c:20:
+C:\ST\STM32CubeIDE_1.17.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.win32_1.1.0.202410251130\tools\bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/include/stdio.h:250:36: note: expected 'const char * restrict' but argument is of type 'int32_t' {aka 'long int'}
+  250 | int     sprintf (char *__restrict, const char *__restrict, ...)
+      |                                    ^
+../Core/Src/main.c: At top level:
+../Core/Src/main.c:74:16: warning: 'tx_buffer' defined but not used [-Wunused-variable]
+   74 | static uint8_t tx_buffer[1000];
+      |                ^~~~~~~~~
+../Core/Src/main.c:73:24: warning: 'rst' defined but not used [-Wunused-variable]
+   73 | static uint8_t whoamI, rst;
+      |                        ^~~
+../Core/Src/main.c:73:16: warning: 'whoamI' defined but not used [-Wunused-variable]
+   73 | static uint8_t whoamI, rst;
+      |                ^~~~~~
+../Core/Src/main.c:72:16: warning: 'angular_rate_mdps' defined but not used [-Wunused-variable]
+   72 | static float_t angular_rate_mdps[3];
+      |                ^~~~~~~~~~~~~~~~~
+../Core/Src/main.c:71:16: warning: 'acceleration_mg' defined but not used [-Wunused-variable]
+   71 | static float_t acceleration_mg[3];
+      |                ^~~~~~~~~~~~~~~
+../Core/Src/main.c:70:16: warning: 'data_raw_angular_rate' defined but not used [-Wunused-variable]
+   70 | static int16_t data_raw_angular_rate[3];
+      |                ^~~~~~~~~~~~~~~~~~~~~
+../Core/Src/main.c:69:16: warning: 'data_raw_acceleration' defined but not used [-Wunused-variable]
+   69 | static int16_t data_raw_acceleration[3];
+      |                ^~~~~~~~~~~~~~~~~~~~~
+arm-none-eabi-g++ -o "test.elf" @"objects.list"   -mcpu=cortex-m4 -T"C:\Users\thepd\STM32CubeIDE\to_stm_base_proj_added_i2c\test\STM32G431RBTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="test.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -lstdc++ -lsupc++ -Wl,--end-group
+Finished building target: test.elf
+ 
+arm-none-eabi-size  test.elf 
+arm-none-eabi-objdump -h -S test.elf  > "test.list"
+   text	   data	    bss	    dec	    hex	filename
+  21176	    124	   2172	  23472	   5bb0	test.elf
+Finished building: default.size.stdout
+ 
+Finished building: test.list
+ 
+13:25:40 **** Incremental Build of configuration Debug for project test ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_NUCLEO_64 -DUSE_HAL_DRIVER -DSTM32G431xx -c -I../Core/Inc -I../Drivers/STM32G4xx_HAL_Driver/Inc -I../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I../Drivers/BSP/STM32G4xx_Nucleo -I../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+../Core/Src/main.c: In function 'main':
+../Core/Src/main.c:229:21: warning: passing argument 2 of 'sprintf' makes pointer from integer without a cast [-Wint-conversion]
+  229 |                     gyro_mdps_x, gyro_mdps_y, gyro_mdps_z);
+      |                     ^~~~~~~~~~~
+      |                     |
+      |                     int32_t {aka long int}
+In file included from ../Core/Inc/main.h:32,
+                 from ../Core/Src/main.c:20:
+C:\ST\STM32CubeIDE_1.17.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.12.3.rel1.win32_1.1.0.202410251130\tools\bin/../lib/gcc/arm-none-eabi/12.3.1/../../../../arm-none-eabi/include/stdio.h:250:36: note: expected 'const char * restrict' but argument is of type 'int32_t' {aka 'long int'}
+  250 | int     sprintf (char *__restrict, const char *__restrict, ...)
+      |                                    ^
+arm-none-eabi-g++ -o "test.elf" @"objects.list"   -mcpu=cortex-m4 -T"C:\Users\thepd\STM32CubeIDE\to_stm_base_proj_added_i2c\test\STM32G431RBTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="test.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -lstdc++ -lsupc++ -Wl,--end-group
+Finished building target: test.elf
+ 
+arm-none-eabi-size  test.elf 
+arm-none-eabi-objdump -h -S test.elf  > "test.list"
+   text	   data	    bss	    dec	    hex	filename
+  21176	    124	   2172	  23472	   5bb0	test.elf
+Finished building: default.size.stdout
+ 
+Finished building: test.list
+ 
+13:26:08 **** Incremental Build of configuration Debug for project test ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_NUCLEO_64 -DUSE_HAL_DRIVER -DSTM32G431xx -c -I../Core/Inc -I../Drivers/STM32G4xx_HAL_Driver/Inc -I../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I../Drivers/BSP/STM32G4xx_Nucleo -I../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-g++ -o "test.elf" @"objects.list"   -mcpu=cortex-m4 -T"C:\Users\thepd\STM32CubeIDE\to_stm_base_proj_added_i2c\test\STM32G431RBTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="test.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -lstdc++ -lsupc++ -Wl,--end-group
+Finished building target: test.elf
+ 
+arm-none-eabi-size  test.elf 
+arm-none-eabi-objdump -h -S test.elf  > "test.list"
+   text	   data	    bss	    dec	    hex	filename
+  20236	    124	   2172	  22532	   5804	test.elf
+Finished building: default.size.stdout
+ 
+Finished building: test.list
+ 
+13:26:13 **** Incremental Build of configuration Debug for project test ****
+make -j8 all 
+arm-none-eabi-size  test.elf 
+   text	   data	    bss	    dec	    hex	filename
+  20236	    124	   2172	  22532	   5804	test.elf
+Finished building: default.size.stdout
+ 
+13:49:38 **** Incremental Build of configuration Debug for project test ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_NUCLEO_64 -DUSE_HAL_DRIVER -DSTM32G431xx -c -I../Core/Inc -I../Drivers/STM32G4xx_HAL_Driver/Inc -I../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I../Drivers/BSP/STM32G4xx_Nucleo -I../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
+arm-none-eabi-g++ -o "test.elf" @"objects.list"   -mcpu=cortex-m4 -T"C:\Users\thepd\STM32CubeIDE\to_stm_base_proj_added_i2c\test\STM32G431RBTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="test.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -lstdc++ -lsupc++ -Wl,--end-group
+Finished building target: test.elf
+ 
+arm-none-eabi-size  test.elf 
+arm-none-eabi-objdump -h -S test.elf  > "test.list"
+   text	   data	    bss	    dec	    hex	filename
+  20228	    124	   2172	  22524	   57fc	test.elf
+Finished building: default.size.stdout
+ 
+Finished building: test.list
+ 
+13:49:43 **** Incremental Build of configuration Debug for project test ****
+make -j8 all 
+arm-none-eabi-size  test.elf 
+   text	   data	    bss	    dec	    hex	filename
+  20228	    124	   2172	  22524	   57fc	test.elf
+Finished building: default.size.stdout
+ 

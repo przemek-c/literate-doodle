@@ -1,4 +1,9 @@
-../Core/Src/main.c:74:5:main	8	static
-../Core/Src/main.c:161:6:SystemClock_Config	88	static
-../Core/Src/main.c:212:6:BSP_PB_Callback	16	static
-../Core/Src/main.c:224:6:Error_Handler	4	static,ignoring_inline_asm
+../Core/Src/main.c:82:6:imu_write_register	32	static
+../Core/Src/main.c:87:6:imu_read_registers	32	static
+../Core/Src/main.c:92:6:imu_init	16	static
+../Core/Src/main.c:105:6:imu_read_accel	24	static
+../Core/Src/main.c:114:6:imu_read_gyro	24	static
+../Core/Src/main.c:127:5:main	48	static
+../Core/Src/main.c:248:6:SystemClock_Config	88	static
+../Core/Src/main.c:299:6:BSP_PB_Callback	16	static
+../Core/Src/main.c:311:6:Error_Handler	4	static,ignoring_inline_asm

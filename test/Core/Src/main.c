@@ -28,11 +28,31 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+typedef struct {
+    int16_t x;
+    int16_t y;
+    int16_t z;
+} imu_data_t;
 
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+// IMU I2C address (LSM6DSO32X uses 0x6A or 0x6B depending on SDO pin; adjust if needed)
+#define IMU_ADDRESS (0x6A << 1)  // 7-bit address shifted left for HAL (0xD4)
+
+// Expected WHO_AM_I value for LSM6DSO32X
+#define WHO_AM_I_VALUE 0x6C
+
+// Sensitivity factors for converting raw data to physical units
+/*
+#define ACCEL_SENSITIVITY 0.061f  // mg/LSB for ±2g full scale
+#define GYRO_SENSITIVITY 70.0f    // mdps/LSB for ±2000 dps full scale
+*/
+// Sensitivity factors (integer)
+#define ACCEL_SENSITIVITY_UG 244  // micro-g per LSB for ±8g range
+// #define GYRO_SENSITIVITY_MDPS 70  // mdps per LSB for ±2000 dps range
+#define GYRO_SENSITIVITY_UDPS 17500 // micro-dps per LSB for ±500 dps
 
 /* USER CODE END PD */
 
@@ -47,12 +67,6 @@ COM_InitTypeDef BspCOMInit;
 __IO uint32_t BspButtonState = BUTTON_RELEASED;
 
 /* USER CODE BEGIN PV */
-static int16_t data_raw_acceleration[3];
-static int16_t data_raw_angular_rate[3];
-static float_t acceleration_mg[3];
-static float_t angular_rate_mdps[3];
-static uint8_t whoamI, rst;
-static uint8_t tx_buffer[1000];
 
 /* USER CODE END PV */
 
@@ -64,7 +78,46 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+// Write to an IMU register
+void imu_write_register(uint8_t reg, uint8_t value) {
+    HAL_I2C_Mem_Write(&hi2c1, IMU_ADDRESS, reg, I2C_MEMADD_SIZE_8BIT, &value, 1, 1000);
+}
 
+// Read from IMU registers
+void imu_read_registers(uint8_t reg, uint8_t *data, uint16_t len) {
+    HAL_I2C_Mem_Read(&hi2c1, IMU_ADDRESS, reg, I2C_MEMADD_SIZE_8BIT, data, len, 1000);
+}
+
+// Initialize the IMU
+void imu_init(void) {
+    uint8_t whoami;
+    imu_read_registers(0x0F, &whoami, 1);  // Read WHO_AM_I register
+    if (whoami != WHO_AM_I_VALUE) {
+        printf("IMU not found: 0x%02X\n\r", whoami);
+        while (1);  // Hang if IMU not detected
+    }
+    imu_write_register(0x12, 0x40);  // CTRL3_C: Enable Block Data Update (BDU)
+    imu_write_register(0x10, 0x64);  // CTRL1_XL: 104 Hz, ±8g (was 0x60 for ±2g)
+    imu_write_register(0x11, 0x64);  // CTRL2_G: 104 Hz, ±500 dps (was 0x6C for ±2000 dps)
+}
+
+// Read accelerometer data
+void imu_read_accel(imu_data_t *accel) {
+    uint8_t buffer[6];
+    imu_read_registers(0x28, buffer, 6);  // OUTX_L_XL to OUTZ_H_XL
+    accel->x = (int16_t)(buffer[0] | (buffer[1] << 8));
+    accel->y = (int16_t)(buffer[2] | (buffer[3] << 8));
+    accel->z = (int16_t)(buffer[4] | (buffer[5] << 8));
+}
+
+// Read gyroscope data
+void imu_read_gyro(imu_data_t *gyro) {
+    uint8_t buffer[6];
+    imu_read_registers(0x22, buffer, 6);  // OUTX_L_G to OUTZ_H_G
+    gyro->x = (int16_t)(buffer[0] | (buffer[1] << 8));
+    gyro->y = (int16_t)(buffer[2] | (buffer[3] << 8));
+    gyro->z = (int16_t)(buffer[4] | (buffer[5] << 8));
+}
 /* USER CODE END 0 */
 
 /**
@@ -126,6 +179,9 @@ int main(void)
   /* -- Sample board code to switch on leds ---- */
   BSP_LED_On(LED_GREEN);
 
+  imu_init();  // Initialize the IMU after peripherals are set up
+  // char message[64];
+
   /* USER CODE END BSP */
 
   /* Infinite loop */
@@ -143,7 +199,38 @@ int main(void)
 
       /* ..... Perform your action ..... */
       printf("Let's do this !\n\r");
-      // to
+      // grok code starts
+      imu_data_t accel, gyro;
+      imu_read_accel(&accel);
+      imu_read_gyro(&gyro);
+
+      // Compute scaled values using integer arithmetic
+      int32_t accel_ug_x = (int32_t)accel.x * ACCEL_SENSITIVITY_UG;
+      int32_t accel_ug_y = (int32_t)accel.y * ACCEL_SENSITIVITY_UG;
+      int32_t accel_ug_z = (int32_t)accel.z * ACCEL_SENSITIVITY_UG;
+      int32_t gyro_udps_x = (int32_t)gyro.x * GYRO_SENSITIVITY_UDPS;
+      int32_t gyro_udps_y = (int32_t)gyro.y * GYRO_SENSITIVITY_UDPS;
+      int32_t gyro_udps_z = (int32_t)gyro.z * GYRO_SENSITIVITY_UDPS;
+
+      // printing by grok:
+      /*
+      // Print data using integer format
+      sprintf(message, "Accel [ug]: X=%ld, Y=%ld, Z=%ld\n\r",
+              accel_ug_x, accel_ug_y, accel_ug_z);
+      HAL_UART_Transmit(&huart2, (uint8_t *)message, strlen(message), HAL_MAX_DELAY);
+
+      sprintf(message, "Gyro [mdps]: X=%ld, Y=%ld, Z=%ld\n\r",
+              gyro_mdps_x, gyro_mdps_y, gyro_mdps_z);
+      HAL_UART_Transmit(&huart2, (uint8_t *)message, strlen(message), HAL_MAX_DELAY);
+      */
+      // printing by me
+      printf("Accel [ug]: X=%ld, Y=%ld, Z=%ld\n\r",
+              accel_ug_x, accel_ug_y, accel_ug_z);
+      printf("Gyro [mdps]: X=%ld, Y=%ld, Z=%ld\n\r",
+                    gyro_udps_x, gyro_udps_y, gyro_udps_z);
+
+      HAL_Delay(100);
+      // grok code ends
 
 
     }
