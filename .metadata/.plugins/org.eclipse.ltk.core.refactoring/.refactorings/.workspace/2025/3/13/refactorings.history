@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Delete resource &apos;test/Core/Src/lsm6dso32x_read_data_polling.c&apos;" deleteContents="false" description="Delete resource &apos;test/Core/Src/lsm6dso32x_read_data_polling.c&apos;" element1="/test/Core/Src/lsm6dso32x_read_data_polling.c" flags="7" id="org.eclipse.ltk.core.refactoring.delete.resources" resources="1" stamp="1743103330480"/>
+</session>

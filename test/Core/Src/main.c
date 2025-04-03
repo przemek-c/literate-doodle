@@ -19,11 +19,14 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "i2c.h"
+#include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "lsm6dso32x_reg.h"
+#include <string.h>
+#include <stdlib.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -54,6 +57,11 @@ typedef struct {
 // #define GYRO_SENSITIVITY_MDPS 70  // mdps per LSB for ±2000 dps range
 #define GYRO_SENSITIVITY_UDPS 17500 // micro-dps per LSB for ±500 dps
 
+// UART STAFF
+#define RX_BUFFER_SIZE 32
+#define START_MARKER '['
+#define END_MARKER ']'
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -67,7 +75,16 @@ COM_InitTypeDef BspCOMInit;
 __IO uint32_t BspButtonState = BUTTON_RELEASED;
 
 /* USER CODE BEGIN PV */
+uint8_t rxBuffer[RX_BUFFER_SIZE];
+volatile uint8_t rxIndex = 0;
+volatile uint8_t messageComplete = 0;
 
+// Variables to store parsed values
+volatile char Steering = 'N';    // L/R/N (Left/Right/Straight/None)
+volatile char Gear = 'N';        // F/B/N (Forward/Backward/None)
+volatile char Type = 'N';        // A/D/N (Acceleration/Deceleration/Constant/None)
+volatile uint8_t Velocity = 0;   // 0-100
+volatile uint8_t Duration = 0;   // seconds
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -118,6 +135,71 @@ void imu_read_gyro(imu_data_t *gyro) {
     gyro->y = (int16_t)(buffer[2] | (buffer[3] << 8));
     gyro->z = (int16_t)(buffer[4] | (buffer[5] << 8));
 }
+
+// UART parsing message
+void parseMessage(char* msg) {
+  if (!msg) {
+      printf("Error: Null message pointer\n\r");
+      return;
+  }
+
+  printf("Parsing message: %s\n\r", msg);  // Debug print
+  char* ptr = msg;
+  
+  // Skip the opening bracket
+  if (*ptr == '[') ptr++;
+  
+  // Parse Steering (S:)
+  if (strncmp(ptr, "S:", 2) == 0) {
+      ptr += 2;  // Skip "S:"
+      Steering = *ptr;  // Get L or R
+      ptr++;  // Move to comma
+      if (*ptr == ',') ptr++;
+  }
+  
+  // Parse Gear (G:)
+  if (strncmp(ptr, "G:", 2) == 0) {
+      ptr += 2;  // Skip "G:"
+      Gear = *ptr;  // Get F or B
+      ptr++;  // Move to comma
+      if (*ptr == ',') ptr++;
+  }
+  
+  // Parse Type (T:)
+  if (strncmp(ptr, "T:", 2) == 0) {
+      ptr += 2;  // Skip "T:"
+      Type = *ptr;  // Get A or D
+      ptr++;  // Move to comma
+      if (*ptr == ',') ptr++;
+  }
+  
+  // Parse Velocity (V:)
+  if (strncmp(ptr, "V:", 2) == 0) {
+      ptr += 2;  // Skip "V:"
+      char* endPtr;
+      long temp = strtol(ptr, &endPtr, 10);
+      if (endPtr != ptr) {
+          Velocity = (uint8_t)temp;
+          ptr = endPtr;
+      }
+      if (*ptr == ',') ptr++;
+  }
+  
+  // Parse Duration (D:)
+  if (strncmp(ptr, "D:", 2) == 0) {
+      ptr += 2;  // Skip "D:"
+      char* endPtr;
+      long temp = strtol(ptr, &endPtr, 10);
+      if (endPtr != ptr) {
+          Duration = (uint8_t)temp;
+      }
+  }
+  
+  // Print parsed values for debugging
+  // printf("Parsed - S:%c G:%c T:%c V:%d D:%d\n\r", Steering, Gear, Type, Velocity, Duration);
+}
+
+
 /* USER CODE END 0 */
 
 /**
@@ -150,7 +232,9 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_I2C1_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+  HAL_UART_Receive_IT(&huart1, &rxBuffer[0], 1);
 
   /* USER CODE END 2 */
 
@@ -188,6 +272,10 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+      if (messageComplete) {
+        parseMessage((char*)rxBuffer);
+        messageComplete = 0;
+    }
 
     /* -- Sample board code for User push-button in interrupt mode ---- */
     if (BspButtonState == BUTTON_PRESSED)
@@ -231,6 +319,12 @@ int main(void)
 
       HAL_Delay(100);
       // grok code ends
+      /*
+      if (messageComplete) {
+        parseMessage((char*)rxBuffer);
+        messageComplete = 0;
+    }
+    */
 
 
     }
@@ -288,7 +382,27 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+  if (huart->Instance == USART1) {
+      if (rxIndex == 0 && rxBuffer[0] != START_MARKER) {
+          // Wait for start marker
+          HAL_UART_Receive_IT(&huart1, &rxBuffer[0], 1);
+          return;
+      }
+      
+      if (rxBuffer[rxIndex] == END_MARKER) {
+          // Message complete
+          rxBuffer[rxIndex + 1] = '\0';  // Null terminate
+          messageComplete = 1;
+          rxIndex = 0;
+      } else if (rxIndex < RX_BUFFER_SIZE - 2) {
+          rxIndex++;
+      }
+      
+      // Continue receiving
+      HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
+  }
+}
 /* USER CODE END 4 */
 
 /**
