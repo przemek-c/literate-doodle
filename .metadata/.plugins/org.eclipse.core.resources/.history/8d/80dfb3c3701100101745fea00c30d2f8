@@ -152,64 +152,48 @@ void imu_read_gyro(imu_data_t *gyro) {
 }
 
 // UART parsing message
-// there was a problem with first char so I change ptr++ to ptr += 2
-// and Python code sends two [[ but here it sees only one
-// weird but it works like that
-
 void parseMessage(char* msg) {
   if (!msg) {
       printf("Error: Null message pointer\n\r");
       return;
   }
 
-  printf("Original message: %s\n\r", msg);  // Debug original message
+  printf("Parsing message: %s\n\r", msg);  // Debug print
   char* ptr = msg;
   
-
-  // First, let's check and skip the opening bracket
+  // Skip the opening bracket
   if (*ptr == '[') {
-      // ptr++;
-      ptr += 2;
-      printf("After bracket check, ptr points to: %s\n\r", ptr);
+      ptr++;
+      printf("After bracket: %s\n\r", ptr);  // Debug print
   } else {
       printf("Error: Message doesn't start with [\n\r");
-      // ptr++;
-      ptr += 2;
+      return;
   }
   
   // Parse all fields in sequence
   while (*ptr != ']' && *ptr != '\0') {
-      printf("Current parsing position: '%s'\n\r", ptr);  // Show exactly what we're looking at
-      
-      // Print the first few characters for debugging
-      printf("Next 3 chars: '%c%c%c'\n\r", ptr[0], ptr[1], ptr[2]);
+      printf("Current ptr: %s\n\r", ptr);  // Debug print
       
       if (strncmp(ptr, "S:", 2) == 0) {
-          ptr += 2;  // Skip "S:"
-          if (*ptr != '\0') {  // Safety check
-              Steering = *ptr;
-              printf("Found Steering: %c\n\r", Steering);
-              ptr++;
-          }
+          ptr += 2;
+          Steering = *ptr;
+          printf("Found Steering: %c\n\r", Steering);
+          ptr++;
       }
       else if (strncmp(ptr, "G:", 2) == 0) {
-          ptr += 2;  // Skip "G:"
-          if (*ptr != '\0') {  // Safety check
-              Gear = *ptr;
-              printf("Found Gear: %c\n\r", Gear);
-              ptr++;
-          }
+          ptr += 2;
+          Gear = *ptr;
+          printf("Found Gear: %c\n\r", Gear);
+          ptr++;
       }
       else if (strncmp(ptr, "T:", 2) == 0) {
-          ptr += 2;  // Skip "T:"
-          if (*ptr != '\0') {  // Safety check
-              Type = *ptr;
-              printf("Found Type: %c\n\r", Type);
-              ptr++;
-          }
+          ptr += 2;
+          Type = *ptr;
+          printf("Found Type: %c\n\r", Type);
+          ptr++;
       }
       else if (strncmp(ptr, "V:", 2) == 0) {
-          ptr += 2;  // Skip "V:"
+          ptr += 2;
           char* endPtr;
           long temp = strtol(ptr, &endPtr, 10);
           if (endPtr != ptr) {
@@ -219,7 +203,7 @@ void parseMessage(char* msg) {
           }
       }
       else if (strncmp(ptr, "D:", 2) == 0) {
-          ptr += 2;  // Skip "D:"
+          ptr += 2;
           char* endPtr;
           long temp = strtol(ptr, &endPtr, 10);
           if (endPtr != ptr) {
@@ -228,16 +212,10 @@ void parseMessage(char* msg) {
               ptr = endPtr;
           }
       }
-      else {
-          // If we don't recognize the field, skip one character
-          printf("Skipping unknown character: %c\n\r", *ptr);
-          ptr++;
-      }
       
-      // Skip comma if present
+      // Skip comma or any other delimiter
       if (*ptr == ',') {
           ptr++;
-          printf("Skipped comma, now at: %s\n\r", ptr);
       }
   }
   
@@ -321,45 +299,22 @@ int main(void)
     if (messageComplete) {
       parseMessage((char*)rxBuffer);
       messageComplete = 0;
-    }
-    /*
-    so I have the message
-    [S:R,G:F,T:A,V:10,D:2]
-    the values are in the global variables
-    char Steering = 'N';    // L/R/S/N (Left/Right/Straight/None)
-    char Gear = 'N';        // F/B/N (Forward/Backward/None)
-    char Type = 'N';        // A/D/C/N (Acceleration/Deceleration/Constant/None)
-    uint8_t Velocity = 0;   // 0-100
-    uint8_t Duration = 0;   // seconds
-    */
-    switch (Steering)
-    {
-    case 'L':
-      motorToLeft();
-      break;
-    case 'R':
-      motorToRight();
-      break;
-    default:
-      motorStraight();
-      break;
-    }
-    
-    switch (Gear)
-    {
-    case 'F':
-      motorForward();
-      break;
-    case 'B':
-      motorBackward();
-      break;
-    default:
-      motorStop();
-      break;
-    }
-   
-
-
+      // stateStartTime = HAL_GetTick();
+      
+      // Should I update motion flags based on new command on work on the old one?
+      /*
+      robotFlags.direction = (Gear == 'F') ? 1 : (Gear == 'B') ? 2 : 0;
+      robotFlags.turn = (Steering == 'L') ? 1 : (Steering == 'R') ? 2 : 0;
+      robotFlags.accelType = (Type == 'A') ? 1 : (Type == 'D') ? 2 : 0;
+      
+      robotFlags.isMoving = (robotFlags.direction != 0);
+      robotFlags.isSteering = (robotFlags.turn != 0);
+      robotFlags.isAccelerating = (robotFlags.accelType != 0);
+      
+      printf("New command - Moving:%d Steering:%d Accel:%d\n\r", 
+             robotFlags.isMoving, robotFlags.isSteering, robotFlags.isAccelerating);
+      */
+  }
     /* -- Sample board code for User push-button in interrupt mode ---- */
     if (BspButtonState == BUTTON_PRESSED)
     {

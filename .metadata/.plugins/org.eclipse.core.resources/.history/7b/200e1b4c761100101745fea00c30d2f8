@@ -321,45 +321,22 @@ int main(void)
     if (messageComplete) {
       parseMessage((char*)rxBuffer);
       messageComplete = 0;
-    }
-    /*
-    so I have the message
-    [S:R,G:F,T:A,V:10,D:2]
-    the values are in the global variables
-    char Steering = 'N';    // L/R/S/N (Left/Right/Straight/None)
-    char Gear = 'N';        // F/B/N (Forward/Backward/None)
-    char Type = 'N';        // A/D/C/N (Acceleration/Deceleration/Constant/None)
-    uint8_t Velocity = 0;   // 0-100
-    uint8_t Duration = 0;   // seconds
-    */
-    switch (Steering)
-    {
-    case 'L':
-      motorToLeft();
-      break;
-    case 'R':
-      motorToRight();
-      break;
-    default:
-      motorStraight();
-      break;
-    }
-    
-    switch (Gear)
-    {
-    case 'F':
-      motorForward();
-      break;
-    case 'B':
-      motorBackward();
-      break;
-    default:
-      motorStop();
-      break;
-    }
-   
-
-
+      // stateStartTime = HAL_GetTick();
+      
+      // Should I update motion flags based on new command on work on the old one?
+      /*
+      robotFlags.direction = (Gear == 'F') ? 1 : (Gear == 'B') ? 2 : 0;
+      robotFlags.turn = (Steering == 'L') ? 1 : (Steering == 'R') ? 2 : 0;
+      robotFlags.accelType = (Type == 'A') ? 1 : (Type == 'D') ? 2 : 0;
+      
+      robotFlags.isMoving = (robotFlags.direction != 0);
+      robotFlags.isSteering = (robotFlags.turn != 0);
+      robotFlags.isAccelerating = (robotFlags.accelType != 0);
+      
+      printf("New command - Moving:%d Steering:%d Accel:%d\n\r", 
+             robotFlags.isMoving, robotFlags.isSteering, robotFlags.isAccelerating);
+      */
+  }
     /* -- Sample board code for User push-button in interrupt mode ---- */
     if (BspButtonState == BUTTON_PRESSED)
     {
