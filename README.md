@@ -63,10 +63,17 @@ void determineMotorCommands(RobotMotionFlags flags, int velocity) {
                     (flags.isAccelerating && flags.accelType == 2) ? velocity - 10 : velocity;
 
     // Ensure base speed is within valid range (e.g., 0 to 100)
-    if (baseSpeed < 0) baseSpeed = 0;
+    if (baseSpeed < 0) baseSpeed = 0; // but -baseSpeed?
     if (baseSpeed > 100) baseSpeed = 100;
 
     // Determine motor speed based on direction
+    // here bit like after all using ifs determine motors state
+    // robot takes only velocity, steering and gear
+    // but not sure if there is not too much variables for the same values
+    // need to check with rest of the code
+
+    int baseSpeed = velocity;
+
     if (flags.isMoving) {
         if (flags.direction == 1) { // Forward
             motorSpeed = baseSpeed;
@@ -86,22 +93,29 @@ void determineMotorCommands(RobotMotionFlags flags, int velocity) {
         }
     }
 
-    // Ensure motor speed is within valid range (-100 to 100)
-    if (motorSpeed < -100) motorSpeed = -100;
-    if (motorSpeed > 100) motorSpeed = 100;
+    setMotor(motorSpeed);
+    setSteeringMotor(steeringState);
 
-    // Call setMotors with the determined motor speed and steering state
-    setMotors(motorSpeed, steeringState);
-    
+
+}
+
+// Placeholder function for setting motor speeds and steering state
+void setMotor(int motorSpeed, const char* steeringState) {
+    // Implement motor control logic here
+    // For now, just print the motor speed and steering state
+    printf("Motor Speed: %d, Steering State: %s\n", motorSpeed);
     // Call the PID controller function with the target speed
     callPIDController(motorSpeed);
 }
 
 // Placeholder function for setting motor speeds and steering state
-void setMotors(int motorSpeed, const char* steeringState) {
+void setSteeringMotor(const char* steeringState) {
     // Implement motor control logic here
     // For now, just print the motor speed and steering state
-    printf("Motor Speed: %d, Steering State: %s\n", motorSpeed, steeringState);
+    printf("Motor Speed: %d, Steering State: %s\n", motorSpeed);
+    // Call the PID controller function with the target speed
+    // bla bla
+    callPIDController(motorSpeed);
 }
 
 // Placeholder function for PID controller
