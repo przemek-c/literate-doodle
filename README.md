@@ -45,51 +45,73 @@ while (1) {
     }
 
     // Handle motion control
-    if (robotFlags.isMoving) {
-        // Handle acceleration/deceleration
-        if (robotFlags.isAccelerating) {
-            if (robotFlags.accelType == 1) {  // Accelerating
-                if (currentSpeed < Velocity) {
-                    currentSpeed++;
-                }
-            } else {  // Decelerating
-                if (currentSpeed > 0) {
-                    currentSpeed--;
-                }
-            }
-        } else {
-            currentSpeed = Velocity;  // Maintain constant speed
+    // this need to be done different way cuz it's just bullshit
+    // so what states do I have?
+    // gpt code starts
+    // Function prototypes
+void setMotors(int motorSpeed, const char* steeringState);
+void determineMotorCommands(RobotMotionFlags flags, int velocity);
+void callPIDController(int targetSpeed);
+
+// Main function to determine motor commands based on flags and velocity
+void determineMotorCommands(RobotMotionFlags flags, int velocity) {
+    int motorSpeed = 0;
+    const char* steeringState = "straight";
+
+    // Determine base speed based on velocity and acceleration type
+    int baseSpeed = (flags.isAccelerating && flags.accelType == 1) ? velocity + 10 :
+                    (flags.isAccelerating && flags.accelType == 2) ? velocity - 10 : velocity;
+
+    // Ensure base speed is within valid range (e.g., 0 to 100)
+    if (baseSpeed < 0) baseSpeed = 0;
+    if (baseSpeed > 100) baseSpeed = 100;
+
+    // Determine motor speed based on direction
+    if (flags.isMoving) {
+        if (flags.direction == 1) { // Forward
+            motorSpeed = baseSpeed;
+        } else if (flags.direction == 2) { // Backward
+            motorSpeed = -baseSpeed;
         }
-
-        // Apply directional control
-        int16_t leftMotorSpeed = currentSpeed;
-        int16_t rightMotorSpeed = currentSpeed;
-
-        // Modify speeds for turning while moving
-        if (robotFlags.isSteering) {
-            if (robotFlags.turn == 1) {  // Left turn
-                rightMotorSpeed = currentSpeed;
-                leftMotorSpeed = currentSpeed * 0.5;  // Reduce inner wheel speed
-            } else {  // Right turn
-                leftMotorSpeed = currentSpeed;
-                rightMotorSpeed = currentSpeed * 0.5;  // Reduce inner wheel speed
-            }
-        }
-
-        // Apply direction
-        if (robotFlags.direction == 2) {  // Backward
-            leftMotorSpeed = -leftMotorSpeed;
-            rightMotorSpeed = -rightMotorSpeed;
-        }
-
-        // Set motor speeds here
-        // setMotorSpeeds(leftMotorSpeed, rightMotorSpeed);
-        printf("Motors L:%d R:%d\n\r", leftMotorSpeed, rightMotorSpeed);
-    } else {
-        // Stop motors
-        currentSpeed = 0;
-        // setMotorSpeeds(0, 0);
     }
+
+    // Determine steering state based on turn flag
+    if (flags.isSteering) {
+        if (flags.turn == 1) { // Turning left
+            steeringState = "left";
+        } else if (flags.turn == 2) { // Turning right
+            steeringState = "right";
+        } else {
+            steeringState = "straight";
+        }
+    }
+
+    // Ensure motor speed is within valid range (-100 to 100)
+    if (motorSpeed < -100) motorSpeed = -100;
+    if (motorSpeed > 100) motorSpeed = 100;
+
+    // Call setMotors with the determined motor speed and steering state
+    setMotors(motorSpeed, steeringState);
+    
+    // Call the PID controller function with the target speed
+    callPIDController(motorSpeed);
+}
+
+// Placeholder function for setting motor speeds and steering state
+void setMotors(int motorSpeed, const char* steeringState) {
+    // Implement motor control logic here
+    // For now, just print the motor speed and steering state
+    printf("Motor Speed: %d, Steering State: %s\n", motorSpeed, steeringState);
+}
+
+// Placeholder function for PID controller
+void callPIDController(int targetSpeed) {
+    // Implement PID control logic here
+    // For now, just print the target speed
+    printf("Target Speed for PID Controller: %d\n", targetSpeed);
+}
+    // gpt code ends
+    
 
     // Check if duration has elapsed
     if (HAL_GetTick() - stateStartTime >= Duration * 1000) {
@@ -110,15 +132,4 @@ while (1) {
 
     HAL_Delay(10);  // Control loop delay
 }
-````
-
-This approach:
-1. Uses bit fields to efficiently store robot state flags
-2. Allows simultaneous movement, steering, and acceleration/deceleration
-3. Handles smooth speed transitions
-4. Adjusts wheel speeds independently for turning
-5. Maintains timing for command duration
-6. Provides continuous IMU feedback
-7. Can be easily extended with additional motion controls
-
-You would need to add your specific motor control functions, but this structure allows for complex combined movements while keeping the code organized and maintainable.
+```
