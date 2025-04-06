@@ -246,6 +246,30 @@ void parseMessage(char* msg) {
          Steering, Gear, Type, Velocity, Duration);
 }
 
+void runMotor(char gear, char type, uint8_t velocity) {
+  //Gear = *gear;
+  
+  switch (Gear)
+  {
+  case 'F':
+    // motorForward
+    // Set PWM
+    TIM8->CCR2 = 30;
+    HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
+    break;
+  case 'B':
+    // motorBackward();
+    break;
+  default:
+    TIM8->CCR2 = 0;
+    HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
+    break;
+  }
+  
+
+}
+
+
 
 /* USER CODE END 0 */
 
@@ -335,33 +359,33 @@ int main(void)
     char Type = 'N';        // A/D/C/N (Acceleration/Deceleration/Constant/None)
     uint8_t Velocity = 0;   // 0-100
     uint8_t Duration = 0;   // seconds
-    */
+
     switch (Steering)
     {
     case 'L':
-      motorToLeft();
+      // motorToLeft();
       break;
     case 'R':
-      motorToRight();
+      // motorToRight();
       break;
     default:
-      motorStraight();
+      // motorStraight();
       break;
     }
     
     switch (Gear)
     {
     case 'F':
-      motorForward();
+      // motorForward();
       break;
     case 'B':
-      motorBackward();
+      // motorBackward();
       break;
     default:
-      motorStop();
+      // motorStop();
       break;
     }
-   
+   */
 
 
     /* -- Sample board code for User push-button in interrupt mode ---- */
@@ -394,6 +418,10 @@ int main(void)
                     gyro_udps_x, gyro_udps_y, gyro_udps_z);
 
       HAL_Delay(100);
+
+      runMotor(Gear, Type, Velocity);
+
+
       // grok code ends
     }
     /* USER CODE END WHILE */
