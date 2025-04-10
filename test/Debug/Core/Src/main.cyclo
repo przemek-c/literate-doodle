@@ -5,8 +5,9 @@
 ../Core/Src/main.c:147:6:imu_read_gyro	1
 ../Core/Src/main.c:160:6:parseMessage	16
 ../Core/Src/main.c:249:6:runMotor	3
-../Core/Src/main.c:280:5:main	4
-../Core/Src/main.c:438:6:SystemClock_Config	3
-../Core/Src/main.c:481:6:HAL_UART_RxCpltCallback	6
-../Core/Src/main.c:509:6:BSP_PB_Callback	2
-../Core/Src/main.c:521:6:Error_Handler	1
+../Core/Src/main.c:278:6:Steer	3
+../Core/Src/main.c:319:5:main	4
+../Core/Src/main.c:479:6:SystemClock_Config	3
+../Core/Src/main.c:522:6:HAL_UART_RxCpltCallback	6
+../Core/Src/main.c:550:6:BSP_PB_Callback	2
+../Core/Src/main.c:562:6:Error_Handler	1

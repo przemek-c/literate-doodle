@@ -251,11 +251,19 @@ void runMotor(char gear, char type, uint8_t velocity) {
   
   switch (Gear)
   {
-  case 'F':
+  case 'F': // F tj 70
     // motorForward
     // Set PWM
-    TIM8->CCR2 = 30;
+	  int PWM1 = 0;
+	  PWM1 = 30;
+    TIM8->CCR2 = PWM1;
     HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
+	  /*
+    while(1){
+        TIM8->CCR2 = PWM1;
+        HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
+    }
+    */
     break;
   case 'B':
     // motorBackward();
@@ -265,8 +273,39 @@ void runMotor(char gear, char type, uint8_t velocity) {
     HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
     break;
   }
-  
+}
 
+void Steer(char steering) {
+	int PWMtoSteer = 30;
+  //Gear = *gear;
+  
+    switch (Steering)
+    {
+    case 'L':
+    	// one to zero
+        TIM3->CCR2 = 0;
+        HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
+    	// second to run
+        TIM4->CCR1 = PWMtoSteer;
+        HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
+      break;
+    case 'R':
+    	// one to zero
+        TIM4->CCR1 = 0;
+        HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
+    	// second to run
+        TIM3->CCR2 = PWMtoSteer;
+        HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
+      break;
+    default:
+    	// both to zero
+        TIM4->CCR1 = 0;
+        HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
+    	// both to zero
+        TIM3->CCR2 = 0;
+        HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
+      break;
+    }
 }
 
 
@@ -350,6 +389,8 @@ int main(void)
       parseMessage((char*)rxBuffer);
       messageComplete = 0;
     }
+    runMotor(Gear, Type, Velocity);
+    Steer(Steering);
     /*
     so I have the message
     [S:R,G:F,T:A,V:10,D:2]
