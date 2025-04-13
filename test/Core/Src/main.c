@@ -254,10 +254,7 @@ void runMotor(char gear, char type, uint8_t velocity) {
   case 'F': // F tj 70
     // motorForward
     // Set PWM
-	  int PWM1 = 0;
-	  PWM1 = 30;
-    TIM8->CCR2 = PWM1;
-    HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
+    regulator(velocity, type);
 	  /*
     while(1){
         TIM8->CCR2 = PWM1;
@@ -306,6 +303,16 @@ void Steer(char steering) {
         HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
       break;
     }
+}
+
+void regulator(int velocity, char type){
+  int PWM_Duty_Cycle = 0;
+  PWM_Duty_Cycle = 30;
+  
+  
+  // Timers configuration
+  TIM8->CCR2 = PWM_Duty_Cycle;
+  HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
 }
 
 
