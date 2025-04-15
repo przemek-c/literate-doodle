@@ -1,3 +1,16 @@
+### Plan
+1. Check if I can use PA9
+2. Check how much timers I have:
+    * datasheet [link](https://www.st.com/resource/en/datasheet/stm32g431c6.pdf)
+    * image  
+    ![alt text]({F81946C4-166E-4B76-A8D4-E9DB81621787}.png)
+2. Encoder Mode on STM is for dedicated encoders, they provide a square-shaped signal not only impulses
+3. About controller
+    * Count impulses
+    * Calculate velocity with encoder system
+    * Simulate an object
+    * Design controller
+### Gemini:
 Implementing a PI controller using an encoder for feedback is a standard and effective way to achieve accurate motor speed control. Here's a breakdown of the steps involved and what you'll need to consider:
 
 1.  **Encoder Input Configuration (PA9):**
@@ -97,7 +110,9 @@ Implementing a PI controller using an encoder for feedback is a standard and eff
 
 **Summary:**
 
-Yes, it's a good approach. It requires careful configuration of hardware (Timer/EXTI), implementing the velocity calculation logic, and tuning the PI gains (Kp, Ki). Pay close attention to the potential pin conflict on PA9.// Add in USER CODE BEGIN PV
+Yes, it's a good approach. It requires careful configuration of hardware (Timer/EXTI), implementing the velocity calculation logic, and tuning the PI gains (Kp, Ki). Pay close attention to the potential pin conflict on PA9.
+```c
+// Add in USER CODE BEGIN PV
         float Kp = 10.0f; // Proportional gain (NEEDS TUNING)
         float Ki = 5.0f;  // Integral gain (NEEDS TUNING)
         float integralTerm = 0.0f;
