@@ -1,24 +1,23 @@
 ### Plan
-1. Check if I can use PA9
-2. Check how much timers I have:
-    * datasheet [link](https://www.st.com/resource/en/datasheet/stm32g431c6.pdf)
-    * image  
-    ![alt text]({F81946C4-166E-4B76-A8D4-E9DB81621787}.png)
-2. Encoder Mode on STM is for dedicated encoders, they provide a square-shaped signal not only impulses
-3. About controller
-    * Count impulses
-    * Calculate velocity with encoder system
-    * Simulate an object
-    * Design controller
+1.  Use PA9 for counting impulses via External Interrupt (EXTI). (USART1 moved to PC4/PC5).
+2.  Check available timers for PWM output and periodic velocity calculation.
+    *   datasheet [link](https://www.st.com/resource/en/datasheet/stm32g431c6.pdf)
+    *   image
+        ![alt text]({F81946C4-166E-4B76-A8D4-E9DB81621787}.png)
+3.  Controller Implementation:
+    *   Count impulses using EXTI on PA9.
+    *   Calculate velocity periodically (e.g., every 100ms using a timer interrupt or `HAL_GetTick()`).
+    *   **Simulate the DC Motor:** Model and simulate offline (e.g., MATLAB/Simulink) to aid controller design and tuning.
+    *   Design PI controller (Kp, Ki tuning needed).
+    *   Implement direction control logic using configured GPIOs for the DRV8833 driver.
+    *   Configure and use a Timer channel for PWM output to control motor speed via DRV8833.
+
 ### Gemini:
-Implementing a PI controller using an encoder for feedback is a standard and effective way to achieve accurate motor speed control. Here's a breakdown of the steps involved and what you'll need to consider:
+Implementing a PI controller using encoder pulses for feedback is a standard and effective way to achieve accurate motor speed control. Here's a breakdown of the steps involved and what you'll need to consider:
 
 1.  **Encoder Input Configuration (PA9):**
-    *   **Pin Conflict:** First, double-check your CubeMX configuration. PA9 is often used for `USART1_TX`. If you're using USART1 for communication (as set up previously), you cannot use PA9 for encoder input simultaneously without complex remapping or choosing a different pin/timer. Assuming you can use PA9:
-    *   **Timer Configuration:** The best way to handle encoder pulses is using a Timer peripheral in **Encoder Mode**. This requires two input pins (typically TI1 and TI2) for quadrature signals (Phase A and Phase B) which allows counting pulses and determining direction. If you only have one pulse signal on PA9, you could use:
-        *   **External Interrupt (EXTI):** Configure PA9 as a GPIO Input with an EXTI line associated with it (e.g., EXTI9_5). You'll count pulses in the EXTI interrupt handler.
-        *   **Timer Input Capture:** Configure a timer (e.g., TIM2, TIM3, TIM4 - check which ones can use PA9 as an input channel) in Input Capture mode. This allows measuring the time between pulses (good for low speed) or counting pulses over a fixed time.
-    *   **CubeMX:** You'll need to configure the chosen peripheral (Timer or GPIO EXTI) in CubeMX and regenerate the code.
+    *   **External Interrupt (EXTI):** Configure PA9 as a GPIO Input with an EXTI line associated with it (e.g., EXTI9_5). You'll count pulses in the EXTI interrupt handler. This is suitable for single-pulse feedback.
+    *   **CubeMX:** Configure the GPIO EXTI in CubeMX and regenerate the code.
 
 2.  **Pulse Counting & Velocity Calculation:**
     *   **EXTI Handler (if using EXTI):**
@@ -33,7 +32,6 @@ Implementing a PI controller using an encoder for feedback is a standard and eff
             }
         }
         ```
-    *   **Timer Handler (if using Timer):** The implementation depends on whether you use Encoder Mode or Input Capture. Encoder mode automatically increments/decrements the timer's counter register (`TIMx->CNT`).
     *   **Velocity Calculation:** You need a periodic task (e.g., using another timer interrupt like Systick, or just in your main loop with `HAL_GetTick()`) to calculate velocity:
         ```c
         // Add in USER CODE BEGIN PV
@@ -42,24 +40,30 @@ Implementing a PI controller using an encoder for feedback is a standard and eff
         volatile uint32_t lastCalcTime = 0;
         #define CALCULATION_INTERVAL_MS 100 // Calculate velocity every 100ms
         #define PULSES_PER_REVOLUTION 1000 // Example: Encoder resolution
-        #define WHEEL_CIRCUMFERENCE_M 0.2 // Example: Wheel circumference in meters
+        // #define WHEEL_CIRCUMFERENCE_M 0.2 // Example: Wheel circumference in meters (If needed)
 
         // In your periodic task (e.g., main loop or timer ISR)
         uint32_t now = HAL_GetTick();
         if (now - lastCalcTime >= CALCULATION_INTERVAL_MS) {
             uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable
+            // Handle potential rollover if using a 32-bit counter for a long time, though unlikely here.
             uint32_t pulsesElapsed = currentPulseCount - lastPulseCount;
             float deltaTime_s = (now - lastCalcTime) / 1000.0f;
 
-            // Calculate velocity (e.g., Revolutions Per Second - RPS)
-            float rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
-            // Or velocity in m/s
-            // currentVelocity = rps * WHEEL_CIRCUMFERENCE_M;
-            currentVelocity = rps; // Store calculated velocity
+            // Prevent division by zero if deltaTime_s is too small or zero
+            if (deltaTime_s > 0.0001f) { // Check against a small threshold
+                 // Calculate velocity (e.g., Revolutions Per Second - RPS)
+                float rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
+                currentVelocity = rps; // Store calculated velocity
+            } else {
+                // Handle case with no time elapsed or very short interval (e.g., maintain previous velocity or set to zero)
+                // currentVelocity = 0.0f; // Or keep previous value
+            }
+
 
             lastPulseCount = currentPulseCount;
             lastCalcTime = now;
-            printf("Pulses: %lu, Velocity (RPS): %.2f\n\r", pulsesElapsed, currentVelocity);
+            // Optional: printf("Pulses: %lu, Velocity (RPS): %.2f\n\r", pulsesElapsed, currentVelocity);
         }
         ```
 
@@ -70,11 +74,14 @@ Implementing a PI controller using an encoder for feedback is a standard and eff
         float Kp = 10.0f; // Proportional gain (NEEDS TUNING)
         float Ki = 5.0f;  // Integral gain (NEEDS TUNING)
         float integralTerm = 0.0f;
-        float maxPWM = 100.0f; // Assuming PWM duty cycle is 0-100
+        // Determine PWM range based on Timer ARR value (e.g., 0 to ARR)
+        // Example: If TIMx->ARR = 999, maxPWM is 999.0f
+        float maxPWM = 999.0f; // Adjust based on selected Timer's ARR register value
         float minPWM = 0.0f;
-        float maxIntegral = 50.0f; // Anti-windup limit
+        float maxIntegral = maxPWM / 2.0f; // Example anti-windup limit (NEEDS TUNING)
 
         // Modify regulator or create new function
+        // Ensure this runs at the same frequency as velocity calculation (CALCULATION_INTERVAL_MS)
         void updatePIController(float desiredVelocity) {
             float error = desiredVelocity - currentVelocity; // Use the calculated velocity
 
@@ -83,77 +90,41 @@ Implementing a PI controller using an encoder for feedback is a standard and eff
 
             // Integral Term with Anti-Windup
             integralTerm += Ki * error * (CALCULATION_INTERVAL_MS / 1000.0f);
+            // Clamp integral term
             if (integralTerm > maxIntegral) integralTerm = maxIntegral;
-            if (integralTerm < -maxIntegral) integralTerm = -maxIntegral;
+            else if (integralTerm < -maxIntegral) integralTerm = -maxIntegral; // Use else if for clarity
 
             // Controller Output
             float output = pTerm + integralTerm;
 
-            // Clamp output to PWM limits
+            // Clamp output to PWM limits (Timer CCR value)
             if (output > maxPWM) output = maxPWM;
-            if (output < minPWM) output = minPWM;
+            else if (output < minPWM) output = minPWM; // Use else if
 
-            // Update PWM Duty Cycle (Adapt for your timer's ARR value)
-            // Assuming TIM8 ARR is 100 for 0-100% duty cycle
-            TIM8->CCR2 = (uint32_t)output;
-            // Make sure PWM is started elsewhere, e.g., in runMotor
-            // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2); // Usually started once
-            printf("Desired: %.2f, Current: %.2f, Error: %.2f, P: %.2f, I: %.2f, Output: %.2f\n\r",
-                   desiredVelocity, currentVelocity, error, pTerm, integralTerm, output);
+            // Update PWM Duty Cycle for the chosen Timer/Channel (e.g., TIM8 Ch2)
+            // Replace TIM8->CCR2 with the correct register for your chosen timer/channel
+            TIM8->CCR2 = (uint32_t)output; // Example: Assumes TIM8_CH2 is used
+
+            // Optional: printf("Desired: %.2f, Current: %.2f, Error: %.2f, P: %.2f, I: %.2f, Output: %.0f\n\r",
+            //       desiredVelocity, currentVelocity, error, pTerm, integralTerm, output);
         }
         ```
 
 4.  **Integration:**
-    *   Call `updatePIController(Velocity)` periodically from your main loop, passing the desired velocity received from the message.
-    *   Ensure the PWM channel (`TIM8_CH2` in your case) is initialized and started correctly.
-    *   The `runMotor` function might now only need to handle direction (Forward/Backward) by setting GPIO pins for your motor driver, while the `updatePIController` handles the speed via PWM.
+    *   Call `updatePIController(desiredVelocity)` periodically (matching `CALCULATION_INTERVAL_MS`) from your main loop or a dedicated timer interrupt, passing the desired velocity (e.g., received via I2C).
+    *   Ensure the chosen PWM Timer channel is initialized (set ARR, prescaler) and the PWM output is started (`HAL_TIM_PWM_Start`).
+    *   Implement functions to set motor direction using the DRV8833 control pins (e.g., `setMotorDirection(FORWARD)` or `setMotorDirection(BACKWARD)`).
 
 **Summary:**
 
-Yes, it's a good approach. It requires careful configuration of hardware (Timer/EXTI), implementing the velocity calculation logic, and tuning the PI gains (Kp, Ki). Pay close attention to the potential pin conflict on PA9.
-```c
-// Add in USER CODE BEGIN PV
-        float Kp = 10.0f; // Proportional gain (NEEDS TUNING)
-        float Ki = 5.0f;  // Integral gain (NEEDS TUNING)
-        float integralTerm = 0.0f;
-        float maxPWM = 100.0f; // Assuming PWM duty cycle is 0-100
-        float minPWM = 0.0f;
-        float maxIntegral = 50.0f; // Anti-windup limit
+This refined approach uses EXTI for pulse counting and PI control for speed regulation via PWM, suitable for your hardware setup. Key steps are configuring EXTI, implementing periodic velocity calculation, tuning the PI controller, and correctly interfacing with the DRV8833 driver (PWM + Direction).
 
-        // Modify regulator or create new function
-        void updatePIController(float desiredVelocity) {
-            float error = desiredVelocity - currentVelocity; // Use the calculated velocity
+**Missing Pieces / Further Considerations:**
 
-            // Proportional Term
-            float pTerm = Kp * error;
-
-            // Integral Term with Anti-Windup
-            integralTerm += Ki * error * (CALCULATION_INTERVAL_MS / 1000.0f);
-            if (integralTerm > maxIntegral) integralTerm = maxIntegral;
-            if (integralTerm < -maxIntegral) integralTerm = -maxIntegral;
-
-            // Controller Output
-            float output = pTerm + integralTerm;
-
-            // Clamp output to PWM limits
-            if (output > maxPWM) output = maxPWM;
-            if (output < minPWM) output = minPWM;
-
-            // Update PWM Duty Cycle (Adapt for your timer's ARR value)
-            // Assuming TIM8 ARR is 100 for 0-100% duty cycle
-            TIM8->CCR2 = (uint32_t)output;
-            // Make sure PWM is started elsewhere, e.g., in runMotor
-            // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2); // Usually started once
-            printf("Desired: %.2f, Current: %.2f, Error: %.2f, P: %.2f, I: %.2f, Output: %.2f\n\r",
-                   desiredVelocity, currentVelocity, error, pTerm, integralTerm, output);
-        }
-        ```
-
-4.  **Integration:**
-    *   Call `updatePIController(Velocity)` periodically from your main loop, passing the desired velocity received from the message.
-    *   Ensure the PWM channel (`TIM8_CH2` in your case) is initialized and started correctly.
-    *   The `runMotor` function might now only need to handle direction (Forward/Backward) by setting GPIO pins for your motor driver, while the `updatePIController` handles the speed via PWM.
-
-**Summary:**
-
-Yes, it's a good approach. It requires careful configuration of hardware (Timer/EXTI), implementing the velocity calculation logic, and tuning the PI gains (Kp, Ki). Pay close attention to the potential pin conflict on PA9.
+*   **Motor Driver Interface:** Confirm which specific Timer and Channel you will use for PWM output to the DRV8833. Ensure the Timer's ARR value is set appropriately and reflected in the `maxPWM` value in the PI controller. Ensure the GPIOs for direction are correctly controlled by your logic.
+*   **Parameter Estimation:** While simulation is offline, you'll still likely need motor parameters (at least rough estimates like `PULSES_PER_REVOLUTION`) for the velocity calculation and potentially for initial PI tuning.
+*   **PI Tuning Strategy:** Plan how you will tune Kp and Ki (e.g., start with simulation results, then refine on hardware).
+*   **Communication Integration:** Ensure the I2C communication reliably provides the `desiredVelocity` to the control loop.
+*   **Safety:** Consider adding safety features like stall detection (e.g., if pulses stop arriving but PWM is high) or an emergency stop mechanism.
+*   **Units:** Maintain consistency in units (e.g., desired velocity vs. calculated velocity units like RPS).
+*   **Timer for Velocity Calc:** Decide if you'll use `HAL_GetTick()` in the main loop or a dedicated hardware timer interrupt for the periodic velocity calculation and PI update. A hardware timer offers better timing precision.
