@@ -101,6 +101,9 @@ volatile uint8_t Duration = 0;   // seconds
 volatile RobotMotionFlags robotFlags = {0};
 volatile uint32_t stateStartTime = 0;
 volatile uint8_t currentSpeed = 0; 
+
+// motor controller
+volatile uint32_t encoderPulseCount = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -305,7 +308,7 @@ void Steer(char steering) {
     }
 }
 
-void regulator(int velocity, char type){
+void regulator(uint8_t velocity, char type){
   int PWM_Duty_Cycle = 0;
   PWM_Duty_Cycle = 30;
   
@@ -546,6 +549,13 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
       // Continue receiving
       HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
   }
+}
+
+// motor controller EXTI handler
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+    if (GPIO_Pin == GPIO_PIN_9) { // Check if it's PA9's interrupt
+        encoderPulseCount++;
+    }
 }
 /* USER CODE END 4 */
 
