@@ -249,6 +249,16 @@ void parseMessage(char* msg) {
          Steering, Gear, Type, Velocity, Duration);
 }
 
+void regulator(unsigned char velocity, volatile char type){
+  int PWM_Duty_Cycle = 0;
+  PWM_Duty_Cycle = 30;
+  
+  
+  // Timers configuration
+  TIM8->CCR2 = PWM_Duty_Cycle;
+  HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
+}
+
 void runMotor(char gear, char type, uint8_t velocity) {
   //Gear = *gear;
   
@@ -257,7 +267,7 @@ void runMotor(char gear, char type, uint8_t velocity) {
   case 'F': // F tj 70
     // motorForward
     // Set PWM
-    regulator(velocity, type);
+    regulator(Velocity, Type);
 	  /*
     while(1){
         TIM8->CCR2 = PWM1;
@@ -308,15 +318,7 @@ void Steer(char steering) {
     }
 }
 
-void regulator(uint8_t velocity, char type){
-  int PWM_Duty_Cycle = 0;
-  PWM_Duty_Cycle = 30;
-  
-  
-  // Timers configuration
-  TIM8->CCR2 = PWM_Duty_Cycle;
-  HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
-}
+
 
 
 
@@ -400,7 +402,7 @@ int main(void)
       messageComplete = 0;
     }
     runMotor(Gear, Type, Velocity);
-    Steer(Steering);
+    // Steer(Steering);
     /*
     so I have the message
     [S:R,G:F,T:A,V:10,D:2]
@@ -470,7 +472,9 @@ int main(void)
 
       HAL_Delay(100);
 
-      runMotor(Gear, Type, Velocity);
+      // runMotor(Gear, Type, Velocity);
+
+      printf("Pulses counted: %ld\n\r", encoderPulseCount);
 
 
       // grok code ends
@@ -555,6 +559,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
     if (GPIO_Pin == GPIO_PIN_9) { // Check if it's PA9's interrupt
         encoderPulseCount++;
+        BSP_LED_Toggle(LED_GREEN);
+        // printf("Pulses counted: %ld\n\r", encoderPulseCount);
     }
 }
 /* USER CODE END 4 */

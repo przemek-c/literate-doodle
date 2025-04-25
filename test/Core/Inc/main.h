@@ -69,6 +69,7 @@ void Error_Handler(void);
 #define RCC_OSC_OUT_GPIO_Port GPIOF
 #define encoder_Pin GPIO_PIN_9
 #define encoder_GPIO_Port GPIOA
+#define encoder_EXTI_IRQn EXTI9_5_IRQn
 #define T_SWDIO_Pin GPIO_PIN_13
 #define T_SWDIO_GPIO_Port GPIOA
 #define T_SWCLK_Pin GPIO_PIN_14
