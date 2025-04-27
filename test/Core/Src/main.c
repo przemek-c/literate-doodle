@@ -63,15 +63,12 @@ typedef struct {
 #define START_MARKER '['
 #define END_MARKER ']'
 
-// Robot motion control flags/states
-typedef struct {
-  uint8_t isMoving : 1;        // 0: stopped, 1: moving
-  uint8_t isSteering : 1;      // 0: straight, 1: turning
-  uint8_t isAccelerating : 1;  // 0: constant speed, 1: changing speed
-  uint8_t direction : 2;       // 0: none, 1: forward, 2: backward
-  uint8_t turn : 2;           // 0: none, 1: left, 2: right
-  uint8_t accelType : 2;      // 0: none, 1: accelerating, 2: decelerating
-} RobotMotionFlags;
+// Velocity calculation
+#define CALCULATION_INTERVAL_MS 100 // Calculate velocity every 100ms
+#define PULSES_PER_REVOLUTION 1 // Example: Encoder resolution
+#define WHEEL_DIAMETER_M 0.075 // Example: Wheel diameter in meters (e.g., 65mm)
+#define PI 3.1415926535f
+#define WHEEL_CIRCUMFERENCE_M (WHEEL_DIAMETER_M * PI)
 
 /* USER CODE END PD */
 
@@ -97,13 +94,22 @@ volatile char Type = 'N';        // A/D/C/N (Acceleration/Deceleration/Constant/
 volatile uint8_t Velocity = 0;   // 0-100
 volatile uint8_t Duration = 0;   // seconds
 
-// Robot motion control flags/states
-volatile RobotMotionFlags robotFlags = {0};
-volatile uint32_t stateStartTime = 0;
-volatile uint8_t currentSpeed = 0; 
-
 // motor controller
+// velocity calculation
 volatile uint32_t encoderPulseCount = 0;
+volatile float linear_mps = 0.0f;
+volatile float currentVelocity = 0.0f;
+volatile uint32_t lastPulseCount = 0;
+volatile uint32_t lastCalcTime = 0;
+
+//PI Controller
+volatile float desiredVelocity = 0.0f;
+float Kp = 10.0f; // Proportional gain (NEEDS TUNING)
+float Ki = 5.0f;  // Integral gain (NEEDS TUNING)
+float integralTerm = 0.0f;
+float maxPWM = 99.0f; // Adjust based on selected Timer's ARR register value
+float minPWM = 0.0f; // int would be fine I guess
+float maxIntegral = 49.5f; // (maxPWM / 2) Example anti-windup limit (NEEDS TUNING)
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -249,14 +255,63 @@ void parseMessage(char* msg) {
          Steering, Gear, Type, Velocity, Duration);
 }
 
-void regulator(unsigned char velocity, volatile char type){
-  int PWM_Duty_Cycle = 0;
-  PWM_Duty_Cycle = 30;
-  
-  
-  // Timers configuration
-  TIM8->CCR2 = PWM_Duty_Cycle;
-  HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
+volatile float calculateCurrentVelocity(volatile uint32_t encoderPulseCount){
+  uint32_t now = HAL_GetTick();
+
+  if (now - lastCalcTime >= CALCULATION_INTERVAL_MS) {
+      // --- Velocity Calculation Logic (as shown previously) ---
+      uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable safely
+      uint32_t pulsesElapsed = currentPulseCount - lastPulseCount;
+      float deltaTime_s = (now - lastCalcTime) / 1000.0f;
+
+      if (deltaTime_s > 0.0001f) {
+          float rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
+          linear_mps = rps * WHEEL_CIRCUMFERENCE_M;
+          // currentVelocity = linear_mps;
+      } else {
+          // Handle zero/small delta time
+          // linear_mps = 0.0f;
+      }
+      lastPulseCount = currentPulseCount;
+      lastCalcTime = now;
+
+      // what do I expect here?
+      // --- End Velocity Calculation Logic ---
+
+      // Call PI controller update *here* if using this approach
+      // updatePIController(desiredVelocity);
+  }
+  return linear_mps;
+}
+
+
+void PIcontroller(volatile float m_desiredVelocity, volatile float m_currentVelocity){
+	float error = m_desiredVelocity - m_currentVelocity;
+
+	float pTerm = Kp * error;
+	integralTerm += Ki * error * (CALCULATION_INTERVAL_MS / 1000.0f);
+	// Clamp integral term
+	if (integralTerm > maxIntegral) integralTerm = maxIntegral;
+	else if (integralTerm < -maxIntegral) integralTerm = -maxIntegral;
+
+	float output = pTerm + integralTerm;
+
+	if (output > maxPWM) output = maxPWM;
+	else if (output < minPWM) output = minPWM;
+
+	// Timers configuration
+    TIM8->CCR2 = (uint32_t)output;
+    HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
+    /*
+    printf("%lu,%.3f,%.3f,%.3f,%.3f,%.3f,%.0f\n",
+               HAL_GetTick(),      // Timestamp in milliseconds
+               desiredVelocity,
+               actualVelocity,
+               error,
+               pTerm,
+               integralTerm,
+               output);
+               */
 }
 
 void runMotor(char gear, char type, uint8_t velocity) {
@@ -264,16 +319,11 @@ void runMotor(char gear, char type, uint8_t velocity) {
   
   switch (Gear)
   {
-  case 'F': // F tj 70
+  case 'F': // F in ASCII is 70
     // motorForward
-    // Set PWM
-    regulator(Velocity, Type);
-	  /*
-    while(1){
-        TIM8->CCR2 = PWM1;
-        HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
-    }
-    */
+    // regulator(Velocity, Type);
+    PIcontroller(desiredVelocity, currentVelocity);
+
     break;
   case 'B':
     // motorBackward();
@@ -401,44 +451,16 @@ int main(void)
       parseMessage((char*)rxBuffer);
       messageComplete = 0;
     }
-    runMotor(Gear, Type, Velocity);
-    // Steer(Steering);
-    /*
-    so I have the message
-    [S:R,G:F,T:A,V:10,D:2]
-    the values are in the global variables
-    char Steering = 'N';    // L/R/S/N (Left/Right/Straight/None)
-    char Gear = 'N';        // F/B/N (Forward/Backward/None)
-    char Type = 'N';        // A/D/C/N (Acceleration/Deceleration/Constant/None)
-    uint8_t Velocity = 0;   // 0-100
-    uint8_t Duration = 0;   // seconds
+    currentVelocity = calculateCurrentVelocity(encoderPulseCount);
+    if (currentVelocity == 0){
+    	printf("Current velocity is 0\n\r");
+    }
+    // desiredVelocity = 2.5;
+    // without plotting it's pointless
 
-    switch (Steering)
-    {
-    case 'L':
-      // motorToLeft();
-      break;
-    case 'R':
-      // motorToRight();
-      break;
-    default:
-      // motorStraight();
-      break;
-    }
-    
-    switch (Gear)
-    {
-    case 'F':
-      // motorForward();
-      break;
-    case 'B':
-      // motorBackward();
-      break;
-    default:
-      // motorStop();
-      break;
-    }
-   */
+
+    runMotor(Gear, Type, Velocity); //
+    Steer(Steering);
 
 
     /* -- Sample board code for User push-button in interrupt mode ---- */
@@ -475,9 +497,6 @@ int main(void)
       // runMotor(Gear, Type, Velocity);
 
       printf("Pulses counted: %ld\n\r", encoderPulseCount);
-
-
-      // grok code ends
     }
     /* USER CODE END WHILE */
 
