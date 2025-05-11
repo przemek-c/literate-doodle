@@ -28,6 +28,7 @@
 #include "lsm6dso32x_reg.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h> // Ensure stdio.h is included for sprintf
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -161,6 +162,30 @@ void imu_read_gyro(imu_data_t *gyro) {
     gyro->z = (int16_t)(buffer[4] | (buffer[5] << 8));
 }
 
+int32_t readGyroZ(){
+    imu_data_t accel, gyro;
+    imu_read_accel(&accel);
+    imu_read_gyro(&gyro);
+
+    // Compute scaled values using integer arithmetic
+    /*
+    int32_t accel_ug_x = (int32_t)accel.x * ACCEL_SENSITIVITY_UG;
+    int32_t accel_ug_y = (int32_t)accel.y * ACCEL_SENSITIVITY_UG;
+    int32_t accel_ug_z = (int32_t)accel.z * ACCEL_SENSITIVITY_UG;
+    int32_t gyro_udps_x = (int32_t)gyro.x * GYRO_SENSITIVITY_UDPS;
+    int32_t gyro_udps_y = (int32_t)gyro.y * GYRO_SENSITIVITY_UDPS;
+    int32_t gyro_udps_z = (int32_t)gyro.z * GYRO_SENSITIVITY_UDPS;
+    */
+
+    return (int32_t)gyro.z * GYRO_SENSITIVITY_UDPS;
+
+    // printing
+    // printf("Accel [ug]: X=%ld, Y=%ld, Z=%ld\n\r",
+    //        accel_ug_x, accel_ug_y, accel_ug_z);
+    // printf("Gyro [mdps]: X=%ld, Y=%ld, Z=%ld\n\r",
+    //              gyro_udps_x, gyro_udps_y, gyro_udps_z);
+}
+
 // UART parsing message
 // there was a problem with first char so I change ptr++ to ptr += 2
 // and Python code sends two [[ but here it sees only one
@@ -210,6 +235,7 @@ void parseMessage(char* msg) {
               ptr++;
           }
       }
+      /*
       else if (strncmp(ptr, "T:", 2) == 0) {
           ptr += 2;  // Skip "T:"
           if (*ptr != '\0') {  // Safety check
@@ -218,6 +244,7 @@ void parseMessage(char* msg) {
               ptr++;
           }
       }
+      */
       else if (strncmp(ptr, "V:", 2) == 0) {
           ptr += 2;  // Skip "V:"
           char* endPtr;
@@ -228,6 +255,7 @@ void parseMessage(char* msg) {
               ptr = endPtr;
           }
       }
+      /*
       else if (strncmp(ptr, "D:", 2) == 0) {
           ptr += 2;  // Skip "D:"
           char* endPtr;
@@ -238,6 +266,7 @@ void parseMessage(char* msg) {
               ptr = endPtr;
           }
       }
+      */
       else {
           // If we don't recognize the field, skip one character
           printf("Skipping unknown character: %c\n\r", *ptr);
@@ -251,10 +280,11 @@ void parseMessage(char* msg) {
       }
   }
   
-  printf("Final parsed values - S:%c G:%c T:%c V:%d D:%d\n\r", 
-         Steering, Gear, Type, Velocity, Duration);
+  printf("Final parsed values - S:%c G:%c V:%d\n\r",
+         // Steering, Gear, Type, Velocity, Duration);
+		  Steering, Gear, Velocity);
 }
-
+/*
 volatile float calculateCurrentVelocity(volatile uint32_t encoderPulseCount){
   uint32_t now = HAL_GetTick();
 
@@ -283,6 +313,44 @@ volatile float calculateCurrentVelocity(volatile uint32_t encoderPulseCount){
   }
   return linear_mps;
 }
+*/
+void sendDataToPlot(float desiredVelocity, float currentVelocity, float error, float output) {
+  // Scale floats to integers (e.g., multiply by 1000 to keep 3 decimal places)
+  int32_t desiredV_scaled = (int32_t)(desiredVelocity * 1000.0f);
+  int32_t currentV_scaled = (int32_t)(currentVelocity * 1000.0f);
+  int32_t error_scaled = (int32_t)(error * 1000.0f);
+  int32_t output_scaled = (int32_t)(output * 1000.0f); // Scale output as well
+
+  int32_t gyro_udps_z = readGyroZ();
+
+  /*
+  // Print scaled integers using %ld format specifier for int32_t
+  printf("%lu,%ld,%ld,%ld,%ld,%ld\n",
+         HAL_GetTick(),      // Timestamp in milliseconds (uint32_t -> %lu)
+         desiredV_scaled,
+         currentV_scaled,
+         error_scaled,
+         output_scaled,
+		 gyro_udps_z);
+  */
+   // Buffer to hold the formatted string for USART1
+   char rpi_buffer[100]; // Adjust size if necessary, 100 should be safe for these values
+
+   // Format the string into rpi_buffer
+   int len = sprintf(rpi_buffer, "%lu,%ld,%ld,%ld,%ld,%ld\n",
+                     HAL_GetTick(),      // Timestamp in milliseconds
+                     desiredV_scaled,
+                     currentV_scaled,
+                     error_scaled,
+                     output_scaled,
+                     gyro_udps_z);
+ 
+   // Transmit the formatted string via USART1 (huart1) to the Raspberry Pi
+   if (len > 0) {
+     HAL_UART_Transmit(&huart1, (uint8_t*)rpi_buffer, len, HAL_MAX_DELAY); // Using huart1 for USART1
+   }
+
+}
 
 
 void PIcontroller(volatile float m_desiredVelocity, volatile float m_currentVelocity){
@@ -299,22 +367,15 @@ void PIcontroller(volatile float m_desiredVelocity, volatile float m_currentVelo
 	if (output > maxPWM) output = maxPWM;
 	else if (output < minPWM) output = minPWM;
 
+  sendDataToPlot(m_desiredVelocity, m_currentVelocity, error, output);
+
 	// Timers configuration
     TIM8->CCR2 = (uint32_t)output;
-    HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
-    /*
-    printf("%lu,%.3f,%.3f,%.3f,%.3f,%.3f,%.0f\n",
-               HAL_GetTick(),      // Timestamp in milliseconds
-               desiredVelocity,
-               actualVelocity,
-               error,
-               pTerm,
-               integralTerm,
-               output);
-               */
+    // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2); // Start PWM only once, not repeatedly here
 }
 
-void runMotor(char gear, char type, uint8_t velocity) {
+// void runMotor(char gear, char type, uint8_t velocity) {
+void runMotor() {
   //Gear = *gear;
   
   switch (Gear)
@@ -322,12 +383,15 @@ void runMotor(char gear, char type, uint8_t velocity) {
   case 'F': // F in ASCII is 70
     // motorForward
     // regulator(Velocity, Type);
+    HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
     PIcontroller(desiredVelocity, currentVelocity);
 
     break;
   case 'B':
-    // motorBackward();
-    break;
+	  // motorBackward
+	  TIM8->CCR2 = 0;
+	  HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
+	  break;
   default:
     TIM8->CCR2 = 0;
     HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
@@ -335,7 +399,7 @@ void runMotor(char gear, char type, uint8_t velocity) {
   }
 }
 
-void Steer(char steering) {
+void Steer() {
 	int PWMtoSteer = 30;
   //Gear = *gear;
   
@@ -451,15 +515,48 @@ int main(void)
       parseMessage((char*)rxBuffer);
       messageComplete = 0;
     }
-    currentVelocity = calculateCurrentVelocity(encoderPulseCount);
+    Steer();
+    // currentVelocity = calculateCurrentVelocity(encoderPulseCount);
+    /*
     if (currentVelocity == 0){
     	printf("Current velocity is 0\n\r");
     }
+    */
     // desiredVelocity = 2.5;
     // without plotting it's pointless
 
+    uint32_t now = HAL_GetTick();
 
-    runMotor(Gear, Type, Velocity); //
+    // Controlling motor with interval
+    if (now - lastCalcTime >= CALCULATION_INTERVAL_MS) {
+        // --- Velocity Calculation Logic (as shown previously) ---
+        uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable safely
+        uint32_t pulsesElapsed = currentPulseCount - lastPulseCount;
+        float deltaTime_s = (now - lastCalcTime) / 1000.0f;
+  
+        if (deltaTime_s > 0.0001f) {
+            float rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
+            currentVelocity = rps * WHEEL_CIRCUMFERENCE_M;
+            // currentVelocity = linear_mps;
+        } else {
+            // Handle zero/small delta time
+            // linear_mps = 0.0f;
+        }
+        lastPulseCount = currentPulseCount;
+        lastCalcTime = now;
+  
+        // what do I expect here?
+        // --- End Velocity Calculation Logic ---
+  
+        // Call PI controller update *here* if using this approach
+        // updatePIController(desiredVelocity);
+        runMotor();
+
+    }
+
+
+    // runMotor(Gear, Type, Velocity); //
+    // runMotor();
     Steer(Steering);
 
 
@@ -474,6 +571,8 @@ int main(void)
       /* ..... Perform your action ..... */
       printf("Let's do this !\n\r");
       // grok code starts
+      // readIMU();
+
       imu_data_t accel, gyro;
       imu_read_accel(&accel);
       imu_read_gyro(&gyro);
@@ -491,6 +590,7 @@ int main(void)
               accel_ug_x, accel_ug_y, accel_ug_z);
       printf("Gyro [mdps]: X=%ld, Y=%ld, Z=%ld\n\r",
                     gyro_udps_x, gyro_udps_y, gyro_udps_z);
+
 
       HAL_Delay(100);
 
