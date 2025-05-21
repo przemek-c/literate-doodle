@@ -66,7 +66,7 @@ typedef struct {
 
 // Velocity calculation
 #define CALCULATION_INTERVAL_MS 100 // Calculate velocity every 100ms
-#define PULSES_PER_REVOLUTION 1 // Example: Encoder resolution
+#define PULSES_PER_REVOLUTION 2 // Example: Encoder resolution
 #define WHEEL_DIAMETER_M 0.075 // Example: Wheel diameter in meters (e.g., 65mm)
 #define PI 3.1415926535f
 #define WHEEL_CIRCUMFERENCE_M (WHEEL_DIAMETER_M * PI)
@@ -105,7 +105,7 @@ volatile uint32_t lastCalcTime = 0;
 
 //PI Controller
 volatile float desiredVelocity = 0.0f;
-float Kp = 10.0f; // Proportional gain (NEEDS TUNING)
+float Kp = 5.0f; // Proportional gain (NEEDS TUNING)
 float Ki = 5.0f;  // Integral gain (NEEDS TUNING)
 float integralTerm = 0.0f;
 float maxPWM = 99.0f; // Adjust based on selected Timer's ARR register value
@@ -250,8 +250,9 @@ void parseMessage(char* msg) {
           char* endPtr;
           long temp = strtol(ptr, &endPtr, 10);
           if (endPtr != ptr) {
-              Velocity = (uint8_t)temp;
-              printf("Found Velocity: %d\n\r", Velocity);
+              // Velocity = (uint8_t)temp;
+              desiredVelocity = (float)temp;
+              // printf("Found Velocity: %d\n\r", Velocity);
               ptr = endPtr;
           }
       }
@@ -557,7 +558,7 @@ int main(void)
 
     // runMotor(Gear, Type, Velocity); //
     // runMotor();
-    Steer(Steering);
+    // Steer(Steering);
 
 
     /* -- Sample board code for User push-button in interrupt mode ---- */
