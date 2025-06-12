@@ -110,7 +110,7 @@ volatile uint32_t lastCalcTime = 0;
 
 //PI Controller
 volatile float desiredVelocity = 0.0f;
-float Kp = 20.0f; // Proportional gain (NEEDS TUNING)
+float Kp = 100.0f; // Proportional gain (NEEDS TUNING)
 float Ki = 1.0f;  // Integral gain (NEEDS TUNING)
 float integralTerm = 0.0f;
 float maxPWM = 99.0f; // Adjust based on selected Timer's ARR register value

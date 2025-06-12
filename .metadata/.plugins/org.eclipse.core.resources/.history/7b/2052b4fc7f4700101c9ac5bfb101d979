@@ -66,10 +66,11 @@ typedef struct {
 
 // Velocity calculation
 #define CALCULATION_INTERVAL_MS 100 // Calculate velocity every 100ms
-#define PULSES_PER_REVOLUTION 1 // Example: Encoder resolution
+#define PULSES_PER_REVOLUTION 2 // Example: Encoder resolution
 #define WHEEL_DIAMETER_M 0.075 // Example: Wheel diameter in meters (e.g., 65mm)
 #define PI 3.1415926535f
 #define WHEEL_CIRCUMFERENCE_M (WHEEL_DIAMETER_M * PI)
+#define RPS_THRESHOLD 0.05f // Minimum RPS to consider as valid movement
 
 /* USER CODE END PD */
 
@@ -94,6 +95,8 @@ volatile char Gear = 'N';        // F/B/N (Forward/Backward/None)
 volatile char Type = 'N';        // A/D/C/N (Acceleration/Deceleration/Constant/None)
 volatile uint8_t Velocity = 0;   // 0-100
 volatile uint8_t Duration = 0;   // seconds
+volatile uint8_t Controller = 0; // 0 or 1
+volatile char Lifting = 'N';
 
 // motor controller
 // velocity calculation
@@ -102,15 +105,20 @@ volatile float linear_mps = 0.0f;
 volatile float currentVelocity = 0.0f;
 volatile uint32_t lastPulseCount = 0;
 volatile uint32_t lastCalcTime = 0;
+// volatile float WHEEL_DIAMETER_M = 0.070; // Example: Wheel diameter in meters (e.g., 65mm)
+
 
 //PI Controller
 volatile float desiredVelocity = 0.0f;
-float Kp = 10.0f; // Proportional gain (NEEDS TUNING)
-float Ki = 5.0f;  // Integral gain (NEEDS TUNING)
+float Kp = 5.0f; // Proportional gain (NEEDS TUNING)
+float Ki = 0.0f;  // Integral gain (NEEDS TUNING)
 float integralTerm = 0.0f;
 float maxPWM = 99.0f; // Adjust based on selected Timer's ARR register value
 float minPWM = 0.0f; // int would be fine I guess
 float maxIntegral = 49.5f; // (maxPWM / 2) Example anti-windup limit (NEEDS TUNING)
+
+int tim3c1 = 0;
+int tim2c2 = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -250,24 +258,31 @@ void parseMessage(char* msg) {
           char* endPtr;
           long temp = strtol(ptr, &endPtr, 10);
           if (endPtr != ptr) {
-              Velocity = (uint8_t)temp;
-              desiredVelocity = (float)Velocity;
-              printf("Found Velocity: %d\n\r", Velocity);
+              // Velocity = (uint8_t)temp;
+              desiredVelocity = (float)temp;
+              // printf("Found Velocity: %d\n\r", Velocity);
               ptr = endPtr;
           }
       }
-      /*
-      else if (strncmp(ptr, "D:", 2) == 0) {
-          ptr += 2;  // Skip "D:"
+      else if (strncmp(ptr, "C:", 2) == 0) {
+          ptr += 2; // Skip "C:"
           char* endPtr;
           long temp = strtol(ptr, &endPtr, 10);
           if (endPtr != ptr) {
-              Duration = (uint8_t)temp;
-              printf("Found Duration: %d\n\r", Duration);
+              Controller = (uint8_t)temp;
+              printf("Found Controller: %d\n\r", Controller);
               ptr = endPtr;
           }
       }
-      */
+      else if (strncmp(ptr, "L:", 2) == 0) {
+          ptr += 2;  // Skip "L:"
+          if (*ptr != '\0') {  // Safety check
+        	  Lifting = *ptr;
+              printf("Found Gear: %c\n\r", Lifting);
+              ptr++;
+          }
+      }
+
       else {
           // If we don't recognize the field, skip one character
           printf("Skipping unknown character: %c\n\r", *ptr);
@@ -281,9 +296,9 @@ void parseMessage(char* msg) {
       }
   }
   
-  printf("Final parsed values - S:%c G:%c V:%d\n\r",
+  printf("Final parsed values - S:%c G:%c V:%d C:%d L:%c\n\r",
          // Steering, Gear, Type, Velocity, Duration);
-		  Steering, Gear, Velocity);
+		  Steering, Gear, Velocity, Controller, Lifting);
 }
 /*
 volatile float calculateCurrentVelocity(volatile uint32_t encoderPulseCount){
@@ -378,24 +393,36 @@ void PIcontroller(volatile float m_desiredVelocity, volatile float m_currentVelo
 // void runMotor(char gear, char type, uint8_t velocity) {
 void runMotor() {
   //Gear = *gear;
-  
+	HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
+	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
   switch (Gear)
   {
   case 'F': // F in ASCII is 70
+	  TIM2->CCR3 = 0;
     // motorForward
-    // regulator(Velocity, Type);
-    HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
-    PIcontroller(desiredVelocity, currentVelocity);
+    // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
+    // should I stop here the HAL_TIM_PWM timer for the backward move?
+    if (Controller == 0) {
+      TIM8->CCR2 = 50; // Set a default PWM value for forward motion
+    }
+    else if (Controller == 1) {
+      PIcontroller(desiredVelocity, currentVelocity);
+    }
+    else {
+      TIM8->CCR2 = 0;
+    }
 
     break;
-  case 'B':
+  case 'B': // 66
 	  // motorBackward
 	  TIM8->CCR2 = 0;
-	  HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
+	  TIM2->CCR3 = 30;
+	  // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
 	  break;
   default:
     TIM8->CCR2 = 0;
-    HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
+    TIM2->CCR3 = 0;
+    // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
     break;
   }
 }
@@ -406,7 +433,7 @@ void Steer() {
   
     switch (Steering)
     {
-    case 'L':
+    case 'L': // 76
     	// one to zero
         TIM3->CCR2 = 0;
         HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
@@ -414,7 +441,7 @@ void Steer() {
         TIM4->CCR1 = PWMtoSteer;
         HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
       break;
-    case 'R':
+    case 'R': // 82
     	// one to zero
         TIM4->CCR1 = 0;
         HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
@@ -433,6 +460,55 @@ void Steer() {
     }
 }
 
+void Lift(){
+	// HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
+	// HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+	/*
+    TIM17->CCR1 = tim2c2; // Ensure other motor is off
+    HAL_TIM_PWM_Start(&htim17, TIM_CHANNEL_1); // Start PWM for TIM2 CH2
+
+    TIM1->CCR3 = tim3c1; // Ensure other motor is off
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3); // Start PWM for TIM3 CH1
+    */
+	switch(Lifting)
+	{
+    case 'U': // 85
+    	TIM17->CCR1 = 0; // Ensure other motor is off
+        HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3); // Start PWM for TIM3 CH1
+        TIM1->CCR3 = 30;
+
+        HAL_Delay(2000); // This will block other operations
+        TIM1->CCR3 = 0;
+        HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_3); // Stop PWM after action
+        Lifting = 'N'; // Reset state after action to prevent re-triggering
+        break; // Added break
+    case 'D': // 68
+    	TIM1->CCR3 = 0; // Ensure other motor is off
+        HAL_TIM_PWM_Start(&htim17, TIM_CHANNEL_1); // Start PWM for TIM2 CH2
+        TIM17->CCR1 = 30;
+
+        HAL_Delay(2000); // This will block other operations
+        TIM17->CCR1 = 0;
+        HAL_TIM_PWM_Stop(&htim17, TIM_CHANNEL_1); // Stop PWM after action
+        Lifting = 'N'; // Reset state after action to prevent re-triggering
+        break; // Added break
+    default:
+        // Ensure both are off and PWMs are stopped if not already
+        if (TIM1->CCR3 != 0) {
+        	TIM1->CCR3 = 0;
+        }
+        // Optional: Stop PWM if you want to ensure it's fully off,
+        // otherwise setting CCR to 0 is often sufficient.
+        // HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_1);
+
+        if (TIM17->CCR1 != 0) {
+        	TIM17->CCR1 = 0;
+        }
+        // HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_2);
+      break;
+	}
+}
+
 
 
 
@@ -447,6 +523,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+
 
   /* USER CODE END 1 */
 
@@ -473,7 +550,12 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM4_Init();
   MX_TIM8_Init();
+  MX_TIM2_Init();
+  MX_TIM1_Init();
+  MX_TIM17_Init();
   /* USER CODE BEGIN 2 */
+  // TIM2->CCR2 = 0;
+  // TIM3->CCR1 = 0;
   HAL_UART_Receive_IT(&huart1, &rxBuffer[0], 1);
 
   /* USER CODE END 2 */
@@ -506,6 +588,7 @@ int main(void)
   imu_init();  // Initialize the IMU after peripherals are set up
   // char message[64];
 
+
   /* USER CODE END BSP */
 
   /* Infinite loop */
@@ -516,7 +599,17 @@ int main(void)
       parseMessage((char*)rxBuffer);
       messageComplete = 0;
     }
+
+    /*
+    TIM17->CCR1 = tim2c2; // Ensure other motor is off
+    HAL_TIM_PWM_Start(&htim17, TIM_CHANNEL_1); // Start PWM for TIM2 CH2
+
+    TIM1->CCR3 = tim3c1; // Ensure other motor is off
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3); // Start PWM for TIM3 CH1
+	*/
+
     Steer();
+    Lift();
     // currentVelocity = calculateCurrentVelocity(encoderPulseCount);
     /*
     if (currentVelocity == 0){
@@ -534,15 +627,17 @@ int main(void)
         uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable safely
         uint32_t pulsesElapsed = currentPulseCount - lastPulseCount;
         float deltaTime_s = (now - lastCalcTime) / 1000.0f;
+        float rps = 0.0f; // Initialize rps
   
-        if (deltaTime_s > 0.0001f) {
-            float rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
-            currentVelocity = rps * WHEEL_CIRCUMFERENCE_M;
-            // currentVelocity = linear_mps;
-        } else {
-            // Handle zero/small delta time
-            // linear_mps = 0.0f;
+        if (deltaTime_s > 0.0001f) { // Avoid division by zero or very small deltaTime
+            rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
+            // Apply thresholding: only update currentVelocity if rps is significant
+            if (fabsf(rps) >= RPS_THRESHOLD) { // fabsf for float absolute value
+                currentVelocity = rps * WHEEL_CIRCUMFERENCE_M;
+            }
+            // If rps is below threshold, currentVelocity remains unchanged (keeps its previous value).
         }
+        // If deltaTime_s is too small, currentVelocity also remains unchanged (keeps its previous value).
         lastPulseCount = currentPulseCount;
         lastCalcTime = now;
   
