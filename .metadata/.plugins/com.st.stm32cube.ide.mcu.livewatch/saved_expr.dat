@@ -1,7 +1,3 @@
+currentVelocity
 output
 desiredVelocity
-currentVelocity
-error
-encoderPulseCount
-rps
-pulsesElapsed

@@ -66,11 +66,13 @@ typedef struct {
 
 // Velocity calculation
 #define CALCULATION_INTERVAL_MS 100 // Calculate velocity every 100ms
-#define PULSES_PER_REVOLUTION 2 // Example: Encoder resolution
-#define WHEEL_DIAMETER_M 0.075 // Example: Wheel diameter in meters (e.g., 65mm)
+#define PULSES_PER_REVOLUTION 4 // Example: Encoder resolution
+#define WHEEL_DIAMETER_M 0.075 // Example: Wheel diameter in meters (75mm)
 #define PI 3.1415926535f
 #define WHEEL_CIRCUMFERENCE_M (WHEEL_DIAMETER_M * PI)
-#define RPS_THRESHOLD 0.05f // Minimum RPS to consider as valid movement
+// #define RPS_THRESHOLD 0.05f // This will be replaced by the EMA filter
+#define MAX_RPS_THRESHOLD 10.0f // Maximum realistic RPS for sanity check
+#define EMA_ALPHA 0.1f // Smoothing factor for Exponential Moving Average filter (0.0 to 1.0)
 
 /* USER CODE END PD */
 
@@ -95,7 +97,7 @@ volatile char Gear = 'N';        // F/B/N (Forward/Backward/None)
 volatile char Type = 'N';        // A/D/C/N (Acceleration/Deceleration/Constant/None)
 volatile uint8_t Velocity = 0;   // 0-100
 volatile uint8_t Duration = 0;   // seconds
-volatile uint8_t Controller = 1; // 0 or 1
+volatile uint8_t Controller = 0; // 0 or 1
 volatile char Lifting = 'N';
 
 // motor controller
@@ -105,17 +107,20 @@ volatile float linear_mps = 0.0f;
 volatile float currentVelocity = 0.0f;
 volatile uint32_t lastPulseCount = 0;
 volatile uint32_t lastCalcTime = 0;
+float rps = 0.0f; // Initialize rps
+volatile float lastGoodVelocity = 0.0f;
 // volatile float WHEEL_DIAMETER_M = 0.070; // Example: Wheel diameter in meters (e.g., 65mm)
+// volatile float EMA_ALPHA = 0.25f;
 
 
 //PI Controller
 volatile float desiredVelocity = 0.0f;
-float Kp = 20.0f; // Proportional gain (NEEDS TUNING)
-float Ki = 1.0f;  // Integral gain (NEEDS TUNING)
-float integralTerm = 0.0f;
-float maxPWM = 99.0f; // Adjust based on selected Timer's ARR register value
+float Kp = 1.03f; // Proportional gain (NEEDS TUNING)
+float Ki = 0.027f;  // Integral gain (NEEDS TUNING)
+float integralTerm = 28.0f;
+float maxPWM = 80.0f; // Adjust based on selected Timer's ARR register value
 float minPWM = 0.0f; // int would be fine I guess
-float maxIntegral = 55.5f; // (maxPWM / 2) Example anti-windup limit (NEEDS TUNING)
+float maxIntegral = 60.0f; // (maxPWM / 2) Example anti-windup limit (NEEDS TUNING)
 
 int tim3c1 = 0;
 int tim2c2 = 0;
@@ -205,7 +210,7 @@ void parseMessage(char* msg) {
       return;
   }
 
-  printf("Original message: %s\n\r", msg);  // Debug original message
+  printf("Recived message: %s\n\r", msg);  // Debug original message
   char* ptr = msg;
   
 
@@ -215,17 +220,17 @@ void parseMessage(char* msg) {
       ptr += 2;
       printf("After bracket check, ptr points to: %s\n\r", ptr);
   } else {
-      printf("Error: Message doesn't start with [\n\r");
+      // printf("Error: Message doesn't start with [\n\r");
       // ptr++;
       ptr += 2;
   }
   
   // Parse all fields in sequence
   while (*ptr != ']' && *ptr != '\0') {
-      printf("Current parsing position: '%s'\n\r", ptr);  // Show exactly what we're looking at
+      // printf("Current parsing position: '%s'\n\r", ptr);  // Show exactly what we're looking at
       
       // Print the first few characters for debugging
-      printf("Next 3 chars: '%c%c%c'\n\r", ptr[0], ptr[1], ptr[2]);
+      // printf("Next 3 chars: '%c%c%c'\n\r", ptr[0], ptr[1], ptr[2]);
       
       if (strncmp(ptr, "S:", 2) == 0) {
           ptr += 2;  // Skip "S:"
@@ -258,9 +263,10 @@ void parseMessage(char* msg) {
           char* endPtr;
           long temp = strtol(ptr, &endPtr, 10);
           if (endPtr != ptr) {
-              // Velocity = (uint8_t)temp;
-              desiredVelocity = (float)temp;
-              // printf("Found Velocity: %d\n\r", Velocity);
+              // moving comma because of the float troubles in usart communication
+        	  Velocity = (uint8_t)temp;
+              desiredVelocity = (float)temp / 10;
+              printf("Found Velocity: %d\n\r", Velocity);
               ptr = endPtr;
           }
       }
@@ -370,7 +376,16 @@ void sendDataToPlot(float desiredVelocity, float currentVelocity, float error, f
 
 
 void PIcontroller(volatile float m_desiredVelocity, volatile float m_currentVelocity){
-	float error = m_desiredVelocity - m_currentVelocity;
+
+	// Truncate current velocity to two decimal places for controller calculation
+	float current_velocity_truncated = (float)((int)(m_currentVelocity * 100.0f)) / 100.0f;
+
+	// Truncate desired velocity to two decimal places for controller calculation - weird behavior while debugging
+	float desired_velocity_truncated = (float)((int)(m_desiredVelocity * 100.0f)) / 100.0f;
+
+	// noise sounds like it work but the numbers those shows that for now
+
+	float error = desired_velocity_truncated - current_velocity_truncated;
 
 	float pTerm = Kp * error;
 	integralTerm += Ki * error * (CALCULATION_INTERVAL_MS / 1000.0f);
@@ -383,7 +398,7 @@ void PIcontroller(volatile float m_desiredVelocity, volatile float m_currentVelo
 	if (output > maxPWM) output = maxPWM;
 	else if (output < minPWM) output = minPWM;
 
-  sendDataToPlot(m_desiredVelocity, m_currentVelocity, error, output);
+	sendDataToPlot(m_desiredVelocity, m_currentVelocity, error, output);
 
 	// Timers configuration
     TIM8->CCR2 = (uint32_t)output;
@@ -399,18 +414,24 @@ void runMotor() {
   {
   case 'F': // F in ASCII is 70
 	  TIM2->CCR3 = 0;
+	//TIM8->CCR2 = 0; // calculating backward velocity
     // motorForward
     // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
     // should I stop here the HAL_TIM_PWM timer for the backward move?
     if (Controller == 0) {
       TIM8->CCR2 = 50; // Set a default PWM value for forward motion
-    }
+      // TIM2->CCR3 = 30; // calculating backward velocity
+ 
+      // int m_error = 0;
+      // int m_output = 0;
+      sendDataToPlot(desiredVelocity, currentVelocity, 0, 50);   }
     else if (Controller == 1) {
       PIcontroller(desiredVelocity, currentVelocity);
     }
     else {
       TIM8->CCR2 = 0;
       currentVelocity = 0;
+      lastGoodVelocity = 0;
     }
 
     break;
@@ -425,12 +446,13 @@ void runMotor() {
     TIM2->CCR3 = 0;
     // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
     currentVelocity = 0;
+    lastGoodVelocity = 0;
     break;
   }
 }
 
 void Steer() {
-	int PWMtoSteer = 30;
+	int PWMtoSteer = 75;
   //Gear = *gear;
   
     switch (Steering)
@@ -556,8 +578,6 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM17_Init();
   /* USER CODE BEGIN 2 */
-  // TIM2->CCR2 = 0;
-  // TIM3->CCR1 = 0;
   HAL_UART_Receive_IT(&huart1, &rxBuffer[0], 1);
 
   /* USER CODE END 2 */
@@ -582,13 +602,12 @@ int main(void)
   /* USER CODE BEGIN BSP */
 
   /* -- Sample board code to send message over COM1 port ---- */
-  printf("Welcome to STM32 world !\n\r");
+  // printf("Welcome to STM32 world !\n\r");
 
   /* -- Sample board code to switch on leds ---- */
   BSP_LED_On(LED_GREEN);
 
   imu_init();  // Initialize the IMU after peripherals are set up
-  // char message[64];
 
 
   /* USER CODE END BSP */
@@ -602,24 +621,9 @@ int main(void)
       messageComplete = 0;
     }
 
-    /*
-    TIM17->CCR1 = tim2c2; // Ensure other motor is off
-    HAL_TIM_PWM_Start(&htim17, TIM_CHANNEL_1); // Start PWM for TIM2 CH2
-
-    TIM1->CCR3 = tim3c1; // Ensure other motor is off
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3); // Start PWM for TIM3 CH1
-	*/
-
     Steer();
     Lift();
-    // currentVelocity = calculateCurrentVelocity(encoderPulseCount);
-    /*
-    if (currentVelocity == 0){
-    	printf("Current velocity is 0\n\r");
-    }
-    */
-    // desiredVelocity = 2.5;
-    // without plotting it's pointless
+
 
     uint32_t now = HAL_GetTick();
 
@@ -629,17 +633,24 @@ int main(void)
         uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable safely
         uint32_t pulsesElapsed = currentPulseCount - lastPulseCount;
         float deltaTime_s = (now - lastCalcTime) / 1000.0f;
-        float rps = 0.0f; // Initialize rps
+        // int curiosityDeltaTime = now - lastCalcTime;
+        //printf("curiosityDeltaTime: %d\n\r", curiosityDeltaTime);
   
         if (deltaTime_s > 0.0001f) { // Avoid division by zero or very small deltaTime
-            rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
-            // Apply thresholding: only update currentVelocity if rps is significant
-            if (fabsf(rps) >= RPS_THRESHOLD) { // fabsf for float absolute value
-                currentVelocity = rps * WHEEL_CIRCUMFERENCE_M;
+            float rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
+
+            // Sanity check to reject extreme outliers before they enter the filter
+            if (fabsf(rps) < MAX_RPS_THRESHOLD) {
+                float raw_velocity = rps * WHEEL_CIRCUMFERENCE_M;
+                // Apply Exponential Moving Average (EMA) filter for smoothing
+
+                currentVelocity = (EMA_ALPHA * raw_velocity) + ((1.0f - EMA_ALPHA) * currentVelocity);
+
+                // currentVelocity = raw_velocity;
             }
-            // If rps is below threshold, currentVelocity remains unchanged (keeps its previous value).
+            // If rps is an extreme outlier, we do nothing, keeping the last filtered value.
         }
-        // If deltaTime_s is too small, currentVelocity also remains unchanged (keeps its previous value).
+        // If deltaTime is too small, we also do nothing, keeping the last filtered value.
         lastPulseCount = currentPulseCount;
         lastCalcTime = now;
   
@@ -694,7 +705,7 @@ int main(void)
 
       // runMotor(Gear, Type, Velocity);
 
-      printf("Pulses counted: %ld\n\r", encoderPulseCount);
+      // printf("Pulses counted: %ld\n\r", encoderPulseCount);
     }
     /* USER CODE END WHILE */
 
