@@ -1,3 +1,4 @@
 currentVelocity
 output
-desiredVelocity
+measuredVelocity
+encoderPulseCount

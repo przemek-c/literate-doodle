@@ -66,13 +66,13 @@ typedef struct {
 #define END_MARKER ']'
 
 // Velocity calculation
-#define CALCULATION_INTERVAL_MS 700 // Calculate velocity every 100ms
+#define CALCULATION_INTERVAL_MS 100 // Calculate velocity every 100ms
 #define PULSES_PER_REVOLUTION 4 // Example: Encoder resolution
 #define WHEEL_DIAMETER_M 0.075 // Example: Wheel diameter in meters (75mm)
 #define PI 3.1415926535f
 #define WHEEL_CIRCUMFERENCE_M (WHEEL_DIAMETER_M * PI)
 // #define RPS_THRESHOLD 0.05f // This will be replaced by the EMA filter
-#define MAX_RPS_THRESHOLD 10.0f // Maximum realistic RPS for sanity check (increased to allow up to ~1.5 m/s)
+#define MAX_RPS_THRESHOLD 20.0f // Maximum realistic RPS for sanity check (increased to allow up to ~1.5 m/s)
 #define EMA_ALPHA 0.1f // Smoothing factor for Exponential Moving Average filter (0.0 to 1.0)
 
 // Alpha-Beta-Gamma filter parameters
@@ -128,7 +128,7 @@ float maxPWM = 80.0f; // Adjust based on selected Timer's ARR register value
 float minPWM = 0.0f; // int would be fine I guess
 float maxIntegral = 60.0f; // (maxPWM / 2) Example anti-windup limit (NEEDS TUNING)
 
-int tim3c1 = 27;
+int tim3c1 = 23;
 int tim2c2 = 0;
 
 // Alpha-Beta-Gamma filter variables
@@ -651,7 +651,6 @@ int main(void)
         // --- Velocity Calculation Logic (as shown previously) ---
         uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable safely
         uint32_t pulsesElapsed = currentPulseCount - lastPulseCount;
-        printf("pulsesElapsed = %ld\n\r", pulsesElapsed);
         float deltaTime_s = (now - lastCalcTime) / 1000.0f;
         // int curiosityDeltaTime = now - lastCalcTime;
         //printf("curiosityDeltaTime: %d\n\r", curiosityDeltaTime);
@@ -688,8 +687,8 @@ int main(void)
                 }
 
                 // Smoothed velocity
-                currentVelocity = v_hat;
-                desiredVelocity = measuredVelocity;
+                // currentVelocity = v_hat;
+                currentVelocity = measuredVelocity;
             }
             // If outlier, do nothing, keep previous filtered values
         }

@@ -689,7 +689,7 @@ int main(void)
 
                 // Smoothed velocity
                 currentVelocity = v_hat;
-                desiredVelocity = measuredVelocity;
+                // currentVelocity = measuredVelocity;
             }
             // If outlier, do nothing, keep previous filtered values
         }

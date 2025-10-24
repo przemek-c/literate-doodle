@@ -29,6 +29,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h> // Ensure stdio.h is included for sprintf
+#include <math.h> // For fabsf
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -72,7 +73,12 @@ typedef struct {
 #define WHEEL_CIRCUMFERENCE_M (WHEEL_DIAMETER_M * PI)
 // #define RPS_THRESHOLD 0.05f // This will be replaced by the EMA filter
 #define MAX_RPS_THRESHOLD 10.0f // Maximum realistic RPS for sanity check
-#define EMA_ALPHA 0.25f // Smoothing factor for Exponential Moving Average filter (0.0 to 1.0)
+#define EMA_ALPHA 0.1f // Smoothing factor for Exponential Moving Average filter (0.0 to 1.0)
+
+// Alpha-Beta-Gamma filter parameters
+#define ALPHA_ABG 0.5f
+#define BETA_ABG 0.4f
+#define GAMMA_ABG 0.1f
 
 /* USER CODE END PD */
 
@@ -110,20 +116,32 @@ volatile uint32_t lastCalcTime = 0;
 float rps = 0.0f; // Initialize rps
 volatile float lastGoodVelocity = 0.0f;
 // volatile float WHEEL_DIAMETER_M = 0.070; // Example: Wheel diameter in meters (e.g., 65mm)
-// volatile float EMA_ALPHA = 0.5f;
+// volatile float EMA_ALPHA = 0.25f;
 
 
 //PI Controller
 volatile float desiredVelocity = 0.0f;
-float Kp = 2.0f; // Proportional gain (NEEDS TUNING)
-float Ki = 0.1f;  // Integral gain (NEEDS TUNING)
-float integralTerm = 30.0f;
+float Kp = 1.03f; // Proportional gain (NEEDS TUNING)
+float Ki = 0.027f;  // Integral gain (NEEDS TUNING)
+float integralTerm = 28.0f;
 float maxPWM = 80.0f; // Adjust based on selected Timer's ARR register value
 float minPWM = 0.0f; // int would be fine I guess
 float maxIntegral = 60.0f; // (maxPWM / 2) Example anti-windup limit (NEEDS TUNING)
 
 int tim3c1 = 0;
 int tim2c2 = 0;
+
+// Alpha-Beta-Gamma filter variables
+float x_hat = 0.0f; // estimated position
+float v_hat = 0.0f; // estimated velocity
+float a_hat = 0.0f; // estimated acceleration
+float measuredPosition = 0.0f; // accumulated measured position
+float measuredVelocity = 0.0f; // added to see live expression
+
+float qALPHA_ABG = 0.2f;
+float qBETA_ABG = 0.01f;
+float qGAMMA_ABG = 0.001f;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -419,7 +437,7 @@ void runMotor() {
     // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
     // should I stop here the HAL_TIM_PWM timer for the backward move?
     if (Controller == 0) {
-      TIM8->CCR2 = 50; // Set a default PWM value for forward motion
+      TIM8->CCR2 = 30; // Set a default PWM value for forward motion
       // TIM2->CCR3 = 30; // calculating backward velocity
  
       // int m_error = 0;
@@ -637,18 +655,34 @@ int main(void)
         //printf("curiosityDeltaTime: %d\n\r", curiosityDeltaTime);
   
         if (deltaTime_s > 0.0001f) { // Avoid division by zero or very small deltaTime
-            float rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
+            float deltaRevs = (float)pulsesElapsed / PULSES_PER_REVOLUTION;
+            float measuredIncrement = deltaRevs * WHEEL_CIRCUMFERENCE_M;
+            // float measuredVelocity = measuredIncrement / deltaTime_s;
+            measuredVelocity = measuredIncrement / deltaTime_s;
 
-            // Sanity check to reject extreme outliers before they enter the filter
-            if (fabsf(rps) < MAX_RPS_THRESHOLD) {
-                float raw_velocity = rps * WHEEL_CIRCUMFERENCE_M;
-                // Apply Exponential Moving Average (EMA) filter for smoothing
+            // Sanity check to reject extreme outliers
+            if (fabsf(measuredVelocity) < MAX_RPS_THRESHOLD * WHEEL_CIRCUMFERENCE_M) {
+                measuredPosition += measuredIncrement;
 
-                // currentVelocity = (EMA_ALPHA * raw_velocity) + ((1.0f - EMA_ALPHA) * currentVelocity);
+                // Alpha-Beta-Gamma filter
+                // Prediction
+                float x_pred = x_hat + v_hat * deltaTime_s + 0.5f * a_hat * deltaTime_s * deltaTime_s;
+                float v_pred = v_hat + a_hat * deltaTime_s;
+                float a_pred = a_hat;
 
-                currentVelocity = raw_velocity;
+                // Residual
+                float r = measuredPosition - x_pred;
+
+                // Update
+                x_hat = x_pred + qALPHA_ABG * r;
+                v_hat = v_pred + (qBETA_ABG / deltaTime_s) * r;
+                a_hat = a_pred + (qGAMMA_ABG / (2.0f * deltaTime_s * deltaTime_s)) * r;
+
+                // Smoothed velocity
+                // currentVelocity = v_hat;
+                currentVelocity = measuredVelocity;
             }
-            // If rps is an extreme outlier, we do nothing, keeping the last filtered value.
+            // If outlier, do nothing, keep previous filtered values
         }
         // If deltaTime is too small, we also do nothing, keeping the last filtered value.
         lastPulseCount = currentPulseCount;

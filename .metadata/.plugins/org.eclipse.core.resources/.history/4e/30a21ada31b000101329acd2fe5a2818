@@ -66,13 +66,13 @@ typedef struct {
 #define END_MARKER ']'
 
 // Velocity calculation
-#define CALCULATION_INTERVAL_MS 700 // Calculate velocity every 100ms
+#define CALCULATION_INTERVAL_MS 100 // Calculate velocity every 100ms
 #define PULSES_PER_REVOLUTION 4 // Example: Encoder resolution
 #define WHEEL_DIAMETER_M 0.075 // Example: Wheel diameter in meters (75mm)
 #define PI 3.1415926535f
 #define WHEEL_CIRCUMFERENCE_M (WHEEL_DIAMETER_M * PI)
 // #define RPS_THRESHOLD 0.05f // This will be replaced by the EMA filter
-#define MAX_RPS_THRESHOLD 10.0f // Maximum realistic RPS for sanity check (increased to allow up to ~1.5 m/s)
+#define MAX_RPS_THRESHOLD 10.0f // Maximum realistic RPS for sanity check
 #define EMA_ALPHA 0.1f // Smoothing factor for Exponential Moving Average filter (0.0 to 1.0)
 
 // Alpha-Beta-Gamma filter parameters
@@ -128,7 +128,7 @@ float maxPWM = 80.0f; // Adjust based on selected Timer's ARR register value
 float minPWM = 0.0f; // int would be fine I guess
 float maxIntegral = 60.0f; // (maxPWM / 2) Example anti-windup limit (NEEDS TUNING)
 
-int tim3c1 = 27;
+int tim3c1 = 0;
 int tim2c2 = 0;
 
 // Alpha-Beta-Gamma filter variables
@@ -136,11 +136,10 @@ float x_hat = 0.0f; // estimated position
 float v_hat = 0.0f; // estimated velocity
 float a_hat = 0.0f; // estimated acceleration
 float measuredPosition = 0.0f; // accumulated measured position
-float measuredVelocity = 0.0f; // added to see live expression
 
 float qALPHA_ABG = 0.5f;
-float qBETA_ABG = 0.1f;
-float qGAMMA_ABG = 0.01f;
+float qBETA_ABG = 0.4f;
+float qGAMMA_ABG = 0.1f;
 
 /* USER CODE END PV */
 
@@ -437,8 +436,7 @@ void runMotor() {
     // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
     // should I stop here the HAL_TIM_PWM timer for the backward move?
     if (Controller == 0) {
-
-      TIM8->CCR2 = tim3c1; // Set a default PWM value for forward motion
+      TIM8->CCR2 = 30; // Set a default PWM value for forward motion
       // TIM2->CCR3 = 30; // calculating backward velocity
  
       // int m_error = 0;
@@ -651,7 +649,6 @@ int main(void)
         // --- Velocity Calculation Logic (as shown previously) ---
         uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable safely
         uint32_t pulsesElapsed = currentPulseCount - lastPulseCount;
-        printf("pulsesElapsed = %ld\n\r", pulsesElapsed);
         float deltaTime_s = (now - lastCalcTime) / 1000.0f;
         // int curiosityDeltaTime = now - lastCalcTime;
         //printf("curiosityDeltaTime: %d\n\r", curiosityDeltaTime);
@@ -659,8 +656,7 @@ int main(void)
         if (deltaTime_s > 0.0001f) { // Avoid division by zero or very small deltaTime
             float deltaRevs = (float)pulsesElapsed / PULSES_PER_REVOLUTION;
             float measuredIncrement = deltaRevs * WHEEL_CIRCUMFERENCE_M;
-            // float measuredVelocity = measuredIncrement / deltaTime_s;
-            measuredVelocity = measuredIncrement / deltaTime_s;
+            float measuredVelocity = measuredIncrement / deltaTime_s;
 
             // Sanity check to reject extreme outliers
             if (fabsf(measuredVelocity) < MAX_RPS_THRESHOLD * WHEEL_CIRCUMFERENCE_M) {
@@ -676,20 +672,12 @@ int main(void)
                 float r = measuredPosition - x_pred;
 
                 // Update
-                x_hat = x_pred + qALPHA_ABG * r;
-                v_hat = v_pred + (qBETA_ABG / deltaTime_s) * r;
-                a_hat = a_pred + (qGAMMA_ABG / (2.0f * deltaTime_s * deltaTime_s)) * r;
-
-                // Reset filter if estimates diverge
-                if (fabsf(v_hat) > 5.0f || fabsf(a_hat) > 10.0f) {
-                    x_hat = measuredPosition;
-                    v_hat = 0.0f;
-                    a_hat = 0.0f;
-                }
+                x_hat = x_pred + ALPHA_ABG * r;
+                v_hat = v_pred + (BETA_ABG / deltaTime_s) * r;
+                a_hat = a_pred + (GAMMA_ABG / (2.0f * deltaTime_s * deltaTime_s)) * r;
 
                 // Smoothed velocity
                 currentVelocity = v_hat;
-                desiredVelocity = measuredVelocity;
             }
             // If outlier, do nothing, keep previous filtered values
         }
