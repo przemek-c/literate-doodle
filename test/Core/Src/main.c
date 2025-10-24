@@ -111,6 +111,7 @@ float rps = 0.0f; // Initialize rps
 volatile float lastGoodVelocity = 0.0f;
 // volatile float WHEEL_DIAMETER_M = 0.070; // Example: Wheel diameter in meters (e.g., 65mm)
 // volatile float EMA_ALPHA = 0.25f;
+volatile uint8_t velocityCalcCounter = 0;
 
 
 //PI Controller
@@ -629,39 +630,37 @@ int main(void)
 
     // Controlling motor with interval
     if (now - lastCalcTime >= CALCULATION_INTERVAL_MS) {
-        // --- Velocity Calculation Logic (as shown previously) ---
-        uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable safely
-        uint32_t pulsesElapsed = currentPulseCount - lastPulseCount;
-        float deltaTime_s = (now - lastCalcTime) / 1000.0f;
-        // int curiosityDeltaTime = now - lastCalcTime;
-        //printf("curiosityDeltaTime: %d\n\r", curiosityDeltaTime);
-  
-        if (deltaTime_s > 0.0001f) { // Avoid division by zero or very small deltaTime
-            float rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
+      // Zawsze uruchamiaj PI kontroler co 100 ms
+      runMotor();
 
-            // Sanity check to reject extreme outliers before they enter the filter
-            if (fabsf(rps) < MAX_RPS_THRESHOLD) {
-                float raw_velocity = rps * WHEEL_CIRCUMFERENCE_M;
-                // Apply Exponential Moving Average (EMA) filter for smoothing
+      // Obliczaj prędkość tylko co 7 cykli (700 ms)
+      velocityCalcCounter++;
+      
+      if (velocityCalcCounter >= 7) {
+          // --- Velocity Calculation Logic ---
+          uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable safely
+          uint32_t pulsesElapsed = currentPulseCount - lastPulseCount;
+          float deltaTime_s = (now - lastCalcTime) / 1000.0f * velocityCalcCounter; // Dostosuj deltaTime do pełnego okresu (700 ms)
 
-                currentVelocity = (EMA_ALPHA * raw_velocity) + ((1.0f - EMA_ALPHA) * currentVelocity);
+          if (deltaTime_s > 0.0001f) { // Avoid division by zero or very small deltaTime
+              float rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
 
-                // currentVelocity = raw_velocity;
-            }
-            // If rps is an extreme outlier, we do nothing, keeping the last filtered value.
-        }
-        // If deltaTime is too small, we also do nothing, keeping the last filtered value.
-        lastPulseCount = currentPulseCount;
-        lastCalcTime = now;
-  
-        // what do I expect here?
-        // --- End Velocity Calculation Logic ---
-  
-        // Call PI controller update *here* if using this approach
-        // updatePIController(desiredVelocity);
-        runMotor();
+              // Sanity check to reject extreme outliers before they enter the filter
+              if (fabsf(rps) < MAX_RPS_THRESHOLD) {
+                  float raw_velocity = rps * WHEEL_CIRCUMFERENCE_M;
+                  // Apply Exponential Moving Average (EMA) filter for smoothing
+                  currentVelocity = (EMA_ALPHA * raw_velocity) + ((1.0f - EMA_ALPHA) * currentVelocity);
+              }
+              // If rps is an extreme outlier, we do nothing, keeping the last filtered value.
+          }
+          // If deltaTime is too small, we also do nothing, keeping the last filtered value.
+          lastPulseCount = currentPulseCount;
+          // lastCalcTime nie resetuj tutaj, aby utrzymać 100 ms dla PI
+          velocityCalcCounter = 0; // Reset licznika
+      }
 
-    }
+      lastCalcTime = now; // Aktualizuj czas zawsze co 100 ms
+  }
 
 
     // runMotor(Gear, Type, Velocity); //
