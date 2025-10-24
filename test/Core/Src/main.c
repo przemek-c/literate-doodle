@@ -249,28 +249,17 @@ void parseMessage(char* msg) {
               ptr++;
           }
       }
-      /*
-      else if (strncmp(ptr, "T:", 2) == 0) {
-          ptr += 2;  // Skip "T:"
-          if (*ptr != '\0') {  // Safety check
-              Type = *ptr;
-              printf("Found Type: %c\n\r", Type);
-              ptr++;
-          }
-      }
-      */
       else if (strncmp(ptr, "V:", 2) == 0) {
           ptr += 2;  // Skip "V:"
-          char* endPtr;
-          long temp = strtol(ptr, &endPtr, 10);
-          if (endPtr != ptr) {
-              // moving comma because of the float troubles in usart communication
-        	  Velocity = (uint8_t)temp;
-              desiredVelocity = (float)temp / 10;
-              printf("Found Velocity: %d\n\r", Velocity);
-              ptr = endPtr;
-          }
+          int temp;
+          if (sscanf(ptr, "%2d", &temp) == 1) {  // Przeczytaj maksymalnie 2 cyfry
+              Velocity = (uint8_t)temp;
+              desiredVelocity = (float)temp / 10.0f;  // Dzielenie przez 10 dla jednostki (np. 12 -> 1.2)
+        printf("Found Velocity: %d\n\r", Velocity);
+        ptr += 2;  // Przesuń wskaźnik o 2 znaki (zakładając 2 cyfry; dostosuj jeśli wiadomość może mieć mniej)
+        }
       }
+      
       else if (strncmp(ptr, "C:", 2) == 0) {
           ptr += 2; // Skip "C:"
           char* endPtr;
