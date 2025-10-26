@@ -72,7 +72,7 @@ typedef struct {
 #define WHEEL_CIRCUMFERENCE_M (WHEEL_DIAMETER_M * PI)
 // #define RPS_THRESHOLD 0.05f // This will be replaced by the EMA filter
 #define MAX_RPS_THRESHOLD 10.0f // Maximum realistic RPS for sanity check
-#define EMA_ALPHA 0.1f // Smoothing factor for Exponential Moving Average filter (0.0 to 1.0)
+// #define EMA_ALPHA 0.1f // Smoothing factor for Exponential Moving Average filter (0.0 to 1.0)
 
 /* USER CODE END PD */
 
@@ -110,8 +110,14 @@ volatile uint32_t lastCalcTime = 0;
 float rps = 0.0f; // Initialize rps
 volatile float lastGoodVelocity = 0.0f;
 // volatile float WHEEL_DIAMETER_M = 0.070; // Example: Wheel diameter in meters (e.g., 65mm)
-// volatile float EMA_ALPHA = 0.25f;
+volatile float EMA_ALPHA = 0.8f;
+volatile float EMA_ALPHA_PULSES = 0.6f;
 volatile uint8_t velocityCalcCounter = 0;
+volatile uint8_t vel_interval = 4;
+float pulsesScaled = 0.0f;
+float pulsesFiltered = 0.0f;
+volatile float raw_velocity = 0.0f;
+
 
 
 //PI Controller
@@ -254,7 +260,7 @@ void parseMessage(char* msg) {
           int temp;
           if (sscanf(ptr, "%2d", &temp) == 1) {  // Przeczytaj maksymalnie 2 cyfry
               Velocity = (uint8_t)temp;
-              desiredVelocity = (float)temp / 10.0f;  // Dzielenie przez 10 dla jednostki (np. 12 -> 1.2)
+              desiredVelocity = (float)temp / 100.0f;  // Dzielenie przez 10 dla jednostki (np. 12 -> 1.2)
         printf("Found Velocity: %d\n\r", Velocity);
         ptr += 2;  // Przesuń wskaźnik o 2 znaki (zakładając 2 cyfry; dostosuj jeśli wiadomość może mieć mniej)
         }
@@ -622,23 +628,34 @@ int main(void)
       // Zawsze uruchamiaj PI kontroler co 100 ms
       runMotor();
 
+
       // Obliczaj prędkość tylko co 7 cykli (700 ms)
       velocityCalcCounter++;
       
-      if (velocityCalcCounter >= 7) {
+      if (velocityCalcCounter >= vel_interval) {
           // --- Velocity Calculation Logic ---
           uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable safely
           uint32_t pulsesElapsed = currentPulseCount - lastPulseCount;
-          float deltaTime_s = (now - lastCalcTime) / 1000.0f * velocityCalcCounter; // Dostosuj deltaTime do pełnego okresu (700 ms)
+
+          printf("pulsesElapsed = %ld\n\r", pulsesElapsed);
+
+          pulsesScaled = (float)pulsesElapsed * 10.0f; // Scaling factor to convert to RPS directly
+
+          pulsesFiltered = (EMA_ALPHA_PULSES * pulsesScaled) + ((1.0f - EMA_ALPHA_PULSES) * pulsesFiltered);
+          
+
+          float deltaTime_s = (now - lastCalcTime) / 1000.0f; // Corrected: actual time elapsed
 
           if (deltaTime_s > 0.0001f) { // Avoid division by zero or very small deltaTime
-              float rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
+              // float rps = pulsesFiltered / PULSES_PER_REVOLUTION / deltaTime_s;
+        	  float rps = pulsesFiltered / PULSES_PER_REVOLUTION / deltaTime_s / 100.0f;
 
               // Sanity check to reject extreme outliers before they enter the filter
               if (fabsf(rps) < MAX_RPS_THRESHOLD) {
-                  float raw_velocity = rps * WHEEL_CIRCUMFERENCE_M;
+                  raw_velocity = rps * WHEEL_CIRCUMFERENCE_M;
                   // Apply Exponential Moving Average (EMA) filter for smoothing
-                  currentVelocity = (EMA_ALPHA * raw_velocity) + ((1.0f - EMA_ALPHA) * currentVelocity);
+                  // currentVelocity = (EMA_ALPHA * raw_velocity) + ((1.0f - EMA_ALPHA) * currentVelocity);
+                  // currentVelocity = raw_velocity;
               }
               // If rps is an extreme outlier, we do nothing, keeping the last filtered value.
           }
@@ -647,6 +664,9 @@ int main(void)
           // lastCalcTime nie resetuj tutaj, aby utrzymać 100 ms dla PI
           velocityCalcCounter = 0; // Reset licznika
       }
+
+      currentVelocity = (EMA_ALPHA * raw_velocity) + ((1.0f - EMA_ALPHA) * currentVelocity);
+      desiredVelocity = pulsesFiltered;
 
       lastCalcTime = now; // Aktualizuj czas zawsze co 100 ms
   }

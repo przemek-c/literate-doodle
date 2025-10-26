@@ -72,7 +72,7 @@ typedef struct {
 #define WHEEL_CIRCUMFERENCE_M (WHEEL_DIAMETER_M * PI)
 // #define RPS_THRESHOLD 0.05f // This will be replaced by the EMA filter
 #define MAX_RPS_THRESHOLD 10.0f // Maximum realistic RPS for sanity check
-// #define EMA_ALPHA 0.25f // Smoothing factor for Exponential Moving Average filter (0.0 to 1.0)
+#define EMA_ALPHA 0.1f // Smoothing factor for Exponential Moving Average filter (0.0 to 1.0)
 
 /* USER CODE END PD */
 
@@ -110,14 +110,16 @@ volatile uint32_t lastCalcTime = 0;
 float rps = 0.0f; // Initialize rps
 volatile float lastGoodVelocity = 0.0f;
 // volatile float WHEEL_DIAMETER_M = 0.070; // Example: Wheel diameter in meters (e.g., 65mm)
-volatile float EMA_ALPHA = 0.25f;
+// volatile float EMA_ALPHA = 0.25f;
+volatile uint8_t velocityCalcCounter = 0;
+volatile uint8_t vel_interval = 0;
 
 
 //PI Controller
 volatile float desiredVelocity = 0.0f;
-float Kp = 2.0f; // Proportional gain (NEEDS TUNING)
-float Ki = 0.1f;  // Integral gain (NEEDS TUNING)
-float integralTerm = 30.0f;
+float Kp = 1.03f; // Proportional gain (NEEDS TUNING)
+float Ki = 0.027f;  // Integral gain (NEEDS TUNING)
+float integralTerm = 28.0f;
 float maxPWM = 80.0f; // Adjust based on selected Timer's ARR register value
 float minPWM = 0.0f; // int would be fine I guess
 float maxIntegral = 60.0f; // (maxPWM / 2) Example anti-windup limit (NEEDS TUNING)
@@ -248,28 +250,17 @@ void parseMessage(char* msg) {
               ptr++;
           }
       }
-      /*
-      else if (strncmp(ptr, "T:", 2) == 0) {
-          ptr += 2;  // Skip "T:"
-          if (*ptr != '\0') {  // Safety check
-              Type = *ptr;
-              printf("Found Type: %c\n\r", Type);
-              ptr++;
-          }
-      }
-      */
       else if (strncmp(ptr, "V:", 2) == 0) {
           ptr += 2;  // Skip "V:"
-          char* endPtr;
-          long temp = strtol(ptr, &endPtr, 10);
-          if (endPtr != ptr) {
-              // moving comma because of the float troubles in usart communication
-        	  Velocity = (uint8_t)temp;
-              desiredVelocity = (float)temp / 10;
-              printf("Found Velocity: %d\n\r", Velocity);
-              ptr = endPtr;
-          }
+          int temp;
+          if (sscanf(ptr, "%2d", &temp) == 1) {  // Przeczytaj maksymalnie 2 cyfry
+              Velocity = (uint8_t)temp;
+              desiredVelocity = (float)temp / 10.0f;  // Dzielenie przez 10 dla jednostki (np. 12 -> 1.2)
+        printf("Found Velocity: %d\n\r", Velocity);
+        ptr += 2;  // Przesuń wskaźnik o 2 znaki (zakładając 2 cyfry; dostosuj jeśli wiadomość może mieć mniej)
+        }
       }
+      
       else if (strncmp(ptr, "C:", 2) == 0) {
           ptr += 2; // Skip "C:"
           char* endPtr;
@@ -629,39 +620,37 @@ int main(void)
 
     // Controlling motor with interval
     if (now - lastCalcTime >= CALCULATION_INTERVAL_MS) {
-        // --- Velocity Calculation Logic (as shown previously) ---
-        uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable safely
-        uint32_t pulsesElapsed = currentPulseCount - lastPulseCount;
-        float deltaTime_s = (now - lastCalcTime) / 1000.0f;
-        // int curiosityDeltaTime = now - lastCalcTime;
-        //printf("curiosityDeltaTime: %d\n\r", curiosityDeltaTime);
-  
-        if (deltaTime_s > 0.0001f) { // Avoid division by zero or very small deltaTime
-            float rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
+      // Zawsze uruchamiaj PI kontroler co 100 ms
+      runMotor();
 
-            // Sanity check to reject extreme outliers before they enter the filter
-            if (fabsf(rps) < MAX_RPS_THRESHOLD) {
-                float raw_velocity = rps * WHEEL_CIRCUMFERENCE_M;
-                // Apply Exponential Moving Average (EMA) filter for smoothing
+      // Obliczaj prędkość tylko co 7 cykli (700 ms)
+      velocityCalcCounter++;
+      
+      if (velocityCalcCounter >= vel_interval) {
+          // --- Velocity Calculation Logic ---
+          uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable safely
+          uint32_t pulsesElapsed = currentPulseCount - lastPulseCount;
+          float deltaTime_s = (now - lastCalcTime) / 1000.0f * velocityCalcCounter; // Dostosuj deltaTime do pełnego okresu (700 ms)
 
-                currentVelocity = (EMA_ALPHA * raw_velocity) + ((1.0f - EMA_ALPHA) * currentVelocity);
+          if (deltaTime_s > 0.0001f) { // Avoid division by zero or very small deltaTime
+              float rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
 
-                // currentVelocity = raw_velocity;
-            }
-            // If rps is an extreme outlier, we do nothing, keeping the last filtered value.
-        }
-        // If deltaTime is too small, we also do nothing, keeping the last filtered value.
-        lastPulseCount = currentPulseCount;
-        lastCalcTime = now;
-  
-        // what do I expect here?
-        // --- End Velocity Calculation Logic ---
-  
-        // Call PI controller update *here* if using this approach
-        // updatePIController(desiredVelocity);
-        runMotor();
+              // Sanity check to reject extreme outliers before they enter the filter
+              if (fabsf(rps) < MAX_RPS_THRESHOLD) {
+                  float raw_velocity = rps * WHEEL_CIRCUMFERENCE_M;
+                  // Apply Exponential Moving Average (EMA) filter for smoothing
+                  currentVelocity = (EMA_ALPHA * raw_velocity) + ((1.0f - EMA_ALPHA) * currentVelocity);
+              }
+              // If rps is an extreme outlier, we do nothing, keeping the last filtered value.
+          }
+          // If deltaTime is too small, we also do nothing, keeping the last filtered value.
+          lastPulseCount = currentPulseCount;
+          // lastCalcTime nie resetuj tutaj, aby utrzymać 100 ms dla PI
+          velocityCalcCounter = 0; // Reset licznika
+      }
 
-    }
+      lastCalcTime = now; // Aktualizuj czas zawsze co 100 ms
+  }
 
 
     // runMotor(Gear, Type, Velocity); //
