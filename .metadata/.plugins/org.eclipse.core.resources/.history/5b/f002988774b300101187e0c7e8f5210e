@@ -66,7 +66,7 @@ typedef struct {
 #define END_MARKER ']'
 
 // Velocity calculation
-#define CALCULATION_INTERVAL_MS 400 // Calculate velocity every 100ms
+#define CALCULATION_INTERVAL_MS 100 // Calculate velocity every 100ms
 #define PULSES_PER_REVOLUTION 4 // Example: Encoder resolution
 #define WHEEL_DIAMETER_M 0.075 // Example: Wheel diameter in meters (75mm)
 #define PI 3.1415926535f

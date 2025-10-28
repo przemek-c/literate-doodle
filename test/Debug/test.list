@@ -1992,7 +1992,7 @@ void PIcontroller(volatile float m_desiredVelocity, volatile float m_currentVelo
  8001250:	42c80000 	.word	0x42c80000
  8001254:	20000004 	.word	0x20000004
  8001258:	20000008 	.word	0x20000008
- 800125c:	3f333333 	.word	0x3f333333
+ 800125c:	3ecccccd 	.word	0x3ecccccd
  8001260:	2000000c 	.word	0x2000000c
  8001264:	20000014 	.word	0x20000014
  8001268:	20000010 	.word	0x20000010
@@ -2507,7 +2507,7 @@ int main(void)
  800155c:	681b      	ldr	r3, [r3, #0]
  800155e:	6cfa      	ldr	r2, [r7, #76]	@ 0x4c
  8001560:	1ad3      	subs	r3, r2, r3
- 8001562:	f5b3 7f2f 	cmp.w	r3, #700	@ 0x2bc
+ 8001562:	f5b3 7fc8 	cmp.w	r3, #400	@ 0x190
  8001566:	f0c0 8101 	bcc.w	800176c <main+0x2bc>
         // --- Velocity Calculation Logic (as shown previously) ---
         uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable safely

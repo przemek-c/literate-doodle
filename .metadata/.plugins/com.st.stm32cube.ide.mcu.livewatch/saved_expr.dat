@@ -1,4 +1,5 @@
 currentVelocity
 output
-measuredVelocity
-encoderPulseCount
+desiredVelocity
+pulsesScaled
+pulsesFiltered
