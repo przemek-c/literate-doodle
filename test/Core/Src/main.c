@@ -72,7 +72,7 @@ typedef struct {
 #define WHEEL_CIRCUMFERENCE_M (WHEEL_DIAMETER_M * PI)
 // #define RPS_THRESHOLD 0.05f // This will be replaced by the EMA filter
 #define MAX_RPS_THRESHOLD 10.0f // Maximum realistic RPS for sanity check
-// #define EMA_ALPHA 0.1f // Smoothing factor for Exponential Moving Average filter (0.0 to 1.0)
+// #define EMA_ALPHA_VELOCITY 0.1f // Smoothing factor for Exponential Moving Average filter (0.0 to 1.0)
 
 /* USER CODE END PD */
 
@@ -108,14 +108,15 @@ volatile float currentVelocity = 0.0f;
 volatile uint32_t lastPulseCount = 0;
 volatile uint32_t lastCalcTime = 0;
 float rps = 0.0f; // Initialize rps
-volatile float EMA_ALPHA = 0.8f;
+volatile float EMA_ALPHA_VELOCITY = 0.8f;
 volatile float EMA_ALPHA_PULSES = 0.1f;
 volatile uint8_t velocityCalcCounter = 0;
-volatile uint8_t vel_interval = 5;
+volatile uint8_t velocity_interval = 3;
 float pulsesScaled = 0.0f;
 float pulsesFiltered = 0.0f;
 volatile float raw_velocity = 0.0f;
 volatile uint8_t filteringCalcCounter = 0;
+volatile uint8_t filtering_interval = 12;
 
 //PI Controller
 volatile float desiredVelocity = 0.0f;
@@ -553,7 +554,7 @@ int main(void)
       filteringCalcCounter++;
       printf("filteringCalcCounter = %d\n\r", filteringCalcCounter);
       
-      if (velocityCalcCounter >= vel_interval) {
+      if (velocityCalcCounter >= velocity_interval) {
           // --- Velocity Calculation Logic ---
           uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable safely
           uint32_t pulsesElapsed = currentPulseCount - lastPulseCount;
@@ -562,7 +563,7 @@ int main(void)
 
           pulsesScaled = (float)pulsesElapsed * 10.0f; // Scaling factor to convert to RPS directly
 
-          if (filteringCalcCounter >= 12) {
+          if (filteringCalcCounter >= filtering_interval) {
             // Exponential Moving Average (EMA) filter for smoothing
             pulsesFiltered = (EMA_ALPHA_PULSES * pulsesScaled) + ((1.0f - EMA_ALPHA_PULSES) * pulsesFiltered);
             
@@ -584,10 +585,16 @@ int main(void)
           }
           lastPulseCount = currentPulseCount;
           velocityCalcCounter = 0; // Reset licznika
-      }
+	  }
 
-      // currentVelocity = (EMA_ALPHA * raw_velocity) + ((1.0f - EMA_ALPHA) * currentVelocity);
-      currentVelocity = raw_velocity;
+		if (filteringCalcCounter >= filtering_interval) {
+            // Exponential Moving Average (EMA) filter for smoothing
+            currentVelocity = (EMA_ALPHA_VELOCITY * raw_velocity) + ((1.0f - EMA_ALPHA_VELOCITY) * currentVelocity);
+          }
+		else {
+			currentVelocity = raw_velocity;
+		}
+
       // desiredVelocity = pulsesFiltered;
       
       lastCalcTime = now; // Aktualizuj czas zawsze co 100 ms
