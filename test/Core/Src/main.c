@@ -589,7 +589,8 @@ int main(void)
 
 		if (filteringCalcCounter >= filtering_interval) {
             // Exponential Moving Average (EMA) filter for smoothing
-            currentVelocity = (EMA_ALPHA_VELOCITY * raw_velocity) + ((1.0f - EMA_ALPHA_VELOCITY) * currentVelocity);
+            // currentVelocity = (EMA_ALPHA_VELOCITY * raw_velocity) + ((1.0f - EMA_ALPHA_VELOCITY) * currentVelocity);
+            currentVelocity = raw_velocity;
           }
 		else {
 			currentVelocity = raw_velocity;
