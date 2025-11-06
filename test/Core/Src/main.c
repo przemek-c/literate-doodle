@@ -258,13 +258,13 @@ void parseMessage(char* msg) {
           }
       }
       */
-      else if (strncmp(ptr, "V:", 2) == 0) {
+      else if (strncmp(ptr, "D:", 2) == 0) {
           ptr += 2;  // Skip "V:"
           char* endPtr;
           long temp = strtol(ptr, &endPtr, 10);
           if (endPtr != ptr) {
               // moving comma because of the float troubles in usart communication
-        	  Velocity = (uint8_t)temp;
+        	  Duration = (uint8_t)temp / 100;
               desiredVelocity = (float)temp / 10;
               printf("Found Velocity: %d\n\r", Velocity);
               ptr = endPtr;
@@ -621,12 +621,22 @@ int main(void)
       messageComplete = 0;
     }
 
-    Steer();
-    Lift();
+    // Steer();
+    // Lift();
 
 
     uint32_t now = HAL_GetTick();
+        
+    if (now - lastCalcTime < Duration) {
+      Drive();
+      Steer();
+      Lift();
+      lastCalcTime = now;
+    else {
+      // Ready for command
+    }
 
+    /*
     // Controlling motor with interval
     if (now - lastCalcTime >= CALCULATION_INTERVAL_MS) {
         // --- Velocity Calculation Logic (as shown previously) ---
@@ -660,6 +670,7 @@ int main(void)
         // Call PI controller update *here* if using this approach
         // updatePIController(desiredVelocity);
         runMotor();
+        */
 
     }
 
