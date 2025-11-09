@@ -100,6 +100,9 @@ volatile uint8_t Duration = 0;   // seconds
 volatile uint8_t Controller = 0; // 0 or 1
 volatile char Lifting = 'N';
 
+// State variable to track if a command is active
+volatile uint8_t commandActive = 0;  // 0: idle, 1: running motors
+
 // motor controller
 // velocity calculation
 volatile uint32_t encoderPulseCount = 0;
