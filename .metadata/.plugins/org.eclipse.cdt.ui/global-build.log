@@ -12,3 +12,10 @@ Finished building: default.size.stdout
  
 Finished building: test.list
  
+18:37:05 **** Incremental Build of configuration Debug for project test ****
+make -j8 all 
+arm-none-eabi-size  test.elf 
+   text	   data	    bss	    dec	    hex	filename
+  38064	    152	   2848	  41064	   a068	test.elf
+Finished building: default.size.stdout
+ 

@@ -1,3 +1,5 @@
 currentVelocity
 output
 desiredVelocity
+EMA_ALPHA
+error

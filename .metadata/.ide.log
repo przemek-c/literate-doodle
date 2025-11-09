@@ -331,3 +331,6 @@
 2025-10-28 15:45:04,427 [INFO] IntegrityCheckThread:103 - End integrity checks thread
 2025-10-28 15:45:24,177 [INFO] WebApp:190 - Connection lost
 2025-10-28 15:45:24,303 [INFO] WebApp:187 - Connection restablished
+2025-10-28 17:17:52,682 [INFO] WebApp:190 - Connection lost
+2025-10-28 17:17:52,866 [INFO] WebApp:187 - Connection restablished
+2025-10-28 18:37:44,688 [ERROR] LogOutputStream:75 - [STDERR_REDIRECT] 
