@@ -267,7 +267,7 @@ void parseMessage(char* msg) {
           long temp = strtol(ptr, &endPtr, 10);
           if (endPtr != ptr) {
             // moving comma because of the float troubles in usart communication
-        	  Duration = (uint8_t)temp / 100;
+        	  Duration = (uint8_t)temp / 1000;
             // desiredVelocity = (float)temp / 10;
             printf("Found Duration: %d\n\r", Duration);
             ptr = endPtr;
@@ -309,13 +309,16 @@ void parseMessage(char* msg) {
 
   // In parseMessage() or after parsing, set commandActive = 1 and initialize lastCalcTime
   // For example, at the end of parseMessage():
-  if (Duration > 0) {  // Only activate if Duration is valid
-    commandActive = 1;
-    lastCalcTime = HAL_GetTick();  // Start timing here
+
+  
+  if (Steering == 'N' && Gear == 'N' && Lifting == 'N') {  // Only activate if Duration is valid
+    commandActive = 0;
   } 
   else {
-    commandActive = 0;  // Immediate timeout if Duration=0
+    commandActive = 1;
+    lastCalcTime = HAL_GetTick();  // Start timing here
   }
+  
   
   printf("Final parsed values - S:%c G:%c D:%d L:%c\n\r",
          // Steering, Gear, Type, Velocity, Duration);
