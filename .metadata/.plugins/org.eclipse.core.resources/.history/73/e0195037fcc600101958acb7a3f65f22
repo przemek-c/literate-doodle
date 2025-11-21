@@ -72,7 +72,7 @@ typedef struct {
 #define WHEEL_CIRCUMFERENCE_M (WHEEL_DIAMETER_M * PI)
 // #define RPS_THRESHOLD 0.05f // This will be replaced by the EMA filter
 #define MAX_RPS_THRESHOLD 10.0f // Maximum realistic RPS for sanity check
-#define EMA_ALPHA 0.25f // Smoothing factor for Exponential Moving Average filter (0.0 to 1.0)
+#define EMA_ALPHA 0.1f // Smoothing factor for Exponential Moving Average filter (0.0 to 1.0)
 
 /* USER CODE END PD */
 
@@ -96,9 +96,12 @@ volatile char Steering = 'N';    // L/R/S/N (Left/Right/Straight/None)
 volatile char Gear = 'N';        // F/B/N (Forward/Backward/None)
 volatile char Type = 'N';        // A/D/C/N (Acceleration/Deceleration/Constant/None)
 volatile uint8_t Velocity = 0;   // 0-100
-volatile uint8_t Duration = 0;   // seconds
+volatile uint16_t Duration = 0;   // seconds, now up to 4 digits (0-9999)
 volatile uint8_t Controller = 0; // 0 or 1
 volatile char Lifting = 'N';
+
+// State variable to track if a command is active
+volatile uint8_t commandActive = 0;  // 0: idle, 1: running motors
 
 // motor controller
 // velocity calculation
@@ -110,14 +113,14 @@ volatile uint32_t lastCalcTime = 0;
 float rps = 0.0f; // Initialize rps
 volatile float lastGoodVelocity = 0.0f;
 // volatile float WHEEL_DIAMETER_M = 0.070; // Example: Wheel diameter in meters (e.g., 65mm)
-// volatile float EMA_ALPHA = 0.5f;
+// volatile float EMA_ALPHA = 0.25f;
 
 
 //PI Controller
 volatile float desiredVelocity = 0.0f;
-float Kp = 2.0f; // Proportional gain (NEEDS TUNING)
-float Ki = 0.1f;  // Integral gain (NEEDS TUNING)
-float integralTerm = 30.0f;
+float Kp = 1.03f; // Proportional gain (NEEDS TUNING)
+float Ki = 0.027f;  // Integral gain (NEEDS TUNING)
+float integralTerm = 28.0f;
 float maxPWM = 80.0f; // Adjust based on selected Timer's ARR register value
 float minPWM = 0.0f; // int would be fine I guess
 float maxIntegral = 60.0f; // (maxPWM / 2) Example anti-windup limit (NEEDS TUNING)
@@ -212,7 +215,7 @@ void parseMessage(char* msg) {
 
   printf("Recived message: %s\n\r", msg);  // Debug original message
   char* ptr = msg;
-  
+  printf("Current parsing position: '%s'\n\r", ptr);  // Show exactly what we're looking at
 
   // First, let's check and skip the opening bracket
   if (*ptr == '[') {
@@ -225,6 +228,8 @@ void parseMessage(char* msg) {
       ptr += 2;
   }
   
+  printf("Current parsing position: '%s'\n\r", ptr);  // Show exactly what we're looking at
+
   // Parse all fields in sequence
   while (*ptr != ']' && *ptr != '\0') {
       // printf("Current parsing position: '%s'\n\r", ptr);  // Show exactly what we're looking at
@@ -248,94 +253,54 @@ void parseMessage(char* msg) {
               ptr++;
           }
       }
-      /*
-      else if (strncmp(ptr, "T:", 2) == 0) {
-          ptr += 2;  // Skip "T:"
-          if (*ptr != '\0') {  // Safety check
-              Type = *ptr;
-              printf("Found Type: %c\n\r", Type);
-              ptr++;
-          }
-      }
-      */
-      else if (strncmp(ptr, "V:", 2) == 0) {
-          ptr += 2;  // Skip "V:"
+      
+      else if (strncmp(ptr, "D:", 2) == 0) {
+          ptr += 2;  // Skip "D:"
           char* endPtr;
           long temp = strtol(ptr, &endPtr, 10);
           if (endPtr != ptr) {
-              // moving comma because of the float troubles in usart communication
-        	  Velocity = (uint8_t)temp;
-              desiredVelocity = (float)temp / 10;
-              printf("Found Velocity: %d\n\r", Velocity);
-              ptr = endPtr;
+            // moving comma because of the float troubles in usart communication
+        	  Duration = (uint16_t)temp;
+            // desiredVelocity = (float)temp / 10;
+            printf("Found Duration: %d\n\r", Duration);
+            ptr = endPtr;
           }
       }
-      else if (strncmp(ptr, "C:", 2) == 0) {
-          ptr += 2; // Skip "C:"
-          char* endPtr;
-          long temp = strtol(ptr, &endPtr, 10);
-          if (endPtr != ptr) {
-              Controller = (uint8_t)temp;
-              printf("Found Controller: %d\n\r", Controller);
-              ptr = endPtr;
-          }
-      }
+
       else if (strncmp(ptr, "L:", 2) == 0) {
           ptr += 2;  // Skip "L:"
           if (*ptr != '\0') {  // Safety check
         	  Lifting = *ptr;
-              printf("Found Gear: %c\n\r", Lifting);
+              printf("Found Lifting: %c\n\r", Lifting);
               ptr++;
           }
       }
 
-      else {
-          // If we don't recognize the field, skip one character
-          printf("Skipping unknown character: %c\n\r", *ptr);
-          ptr++;
-      }
-      
       // Skip comma if present
       if (*ptr == ',') {
-          ptr++;
-          printf("Skipped comma, now at: %s\n\r", ptr);
+        ptr++;
+        printf("Skipped comma, now at: %s\n\r", ptr);
       }
+  }
+
+  // In parseMessage() or after parsing, set commandActive = 1 and initialize lastCalcTime
+  // For example, at the end of parseMessage():
+
+  
+  if (Steering == 'N' && Gear == 'N' && Lifting == 'N') {  // Only activate if Duration is valid
+    commandActive = 0;
+  } 
+  else {
+    commandActive = 1;
+    lastCalcTime = HAL_GetTick();  // Start timing here
   }
   
-  printf("Final parsed values - S:%c G:%c V:%d C:%d L:%c\n\r",
+  
+  printf("Final parsed values - S:%c G:%c D:%d L:%c\n\r",
          // Steering, Gear, Type, Velocity, Duration);
-		  Steering, Gear, Velocity, Controller, Lifting);
+		  Steering, Gear, Duration, Lifting);
 }
-/*
-volatile float calculateCurrentVelocity(volatile uint32_t encoderPulseCount){
-  uint32_t now = HAL_GetTick();
 
-  if (now - lastCalcTime >= CALCULATION_INTERVAL_MS) {
-      // --- Velocity Calculation Logic (as shown previously) ---
-      uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable safely
-      uint32_t pulsesElapsed = currentPulseCount - lastPulseCount;
-      float deltaTime_s = (now - lastCalcTime) / 1000.0f;
-
-      if (deltaTime_s > 0.0001f) {
-          float rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
-          linear_mps = rps * WHEEL_CIRCUMFERENCE_M;
-          // currentVelocity = linear_mps;
-      } else {
-          // Handle zero/small delta time
-          // linear_mps = 0.0f;
-      }
-      lastPulseCount = currentPulseCount;
-      lastCalcTime = now;
-
-      // what do I expect here?
-      // --- End Velocity Calculation Logic ---
-
-      // Call PI controller update *here* if using this approach
-      // updatePIController(desiredVelocity);
-  }
-  return linear_mps;
-}
-*/
 void sendDataToPlot(float desiredVelocity, float currentVelocity, float error, float output) {
   // Scale floats to integers (e.g., multiply by 1000 to keep 3 decimal places)
   int32_t desiredV_scaled = (int32_t)(desiredVelocity * 1000.0f);
@@ -406,7 +371,7 @@ void PIcontroller(volatile float m_desiredVelocity, volatile float m_currentVelo
 }
 
 // void runMotor(char gear, char type, uint8_t velocity) {
-void runMotor() {
+void Drive() {
   //Gear = *gear;
 	HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
@@ -431,7 +396,6 @@ void runMotor() {
     else {
       TIM8->CCR2 = 0;
       currentVelocity = 0;
-      lastGoodVelocity = 0;
     }
 
     break;
@@ -617,58 +581,40 @@ int main(void)
   while (1)
   {
     if (messageComplete) {
-      parseMessage((char*)rxBuffer);
-      messageComplete = 0;
+        printf("Pulses counted: %ld\n\r", encoderPulseCount);
+        parseMessage((char*)rxBuffer);
+        messageComplete = 0;
+        // Note: commandActive is set inside parseMessage() as above
     }
-
-    Steer();
-    Lift();
-
 
     uint32_t now = HAL_GetTick();
-
-    // Controlling motor with interval
-    if (now - lastCalcTime >= CALCULATION_INTERVAL_MS) {
-        // --- Velocity Calculation Logic (as shown previously) ---
-        uint32_t currentPulseCount = encoderPulseCount; // Read volatile variable safely
-        uint32_t pulsesElapsed = currentPulseCount - lastPulseCount;
-        float deltaTime_s = (now - lastCalcTime) / 1000.0f;
-        // int curiosityDeltaTime = now - lastCalcTime;
-        //printf("curiosityDeltaTime: %d\n\r", curiosityDeltaTime);
-  
-        if (deltaTime_s > 0.0001f) { // Avoid division by zero or very small deltaTime
-            float rps = (float)pulsesElapsed / PULSES_PER_REVOLUTION / deltaTime_s;
-
-            // Sanity check to reject extreme outliers before they enter the filter
-            if (fabsf(rps) < MAX_RPS_THRESHOLD) {
-                float raw_velocity = rps * WHEEL_CIRCUMFERENCE_M;
-                // Apply Exponential Moving Average (EMA) filter for smoothing
-
-                // currentVelocity = (EMA_ALPHA * raw_velocity) + ((1.0f - EMA_ALPHA) * currentVelocity);
-
-                currentVelocity = raw_velocity;
-            }
-            // If rps is an extreme outlier, we do nothing, keeping the last filtered value.
-        }
-        // If deltaTime is too small, we also do nothing, keeping the last filtered value.
-        lastPulseCount = currentPulseCount;
-        lastCalcTime = now;
-  
-        // what do I expect here?
-        // --- End Velocity Calculation Logic ---
-  
-        // Call PI controller update *here* if using this approach
-        // updatePIController(desiredVelocity);
-        runMotor();
-
+    
+    if (commandActive && (now - lastCalcTime < (uint32_t)Duration * 1000)) {
+        // Still within Duration: run motors
+        Drive();
+        Steer();
+        Lift();
+        // Do NOT reset lastCalcTime here
+    } else if (commandActive) {
+        // Duration expired: stop motors, send signal to Pi, reset
+        // Stop motors explicitly (set to neutral)
+        Gear = 'N';
+        Steering = 'N';
+        Lifting = 'N';
+        Drive();  // This will set PWM to 0 based on 'N'
+        Steer();
+        Lift();
+        
+        // Send '1' to Pi (with newline for reliability)
+        char signal[3] = "1\n";  // Buffer for the signal
+        HAL_UART_Transmit(&huart1, (uint8_t*)signal, strlen(signal), HAL_MAX_DELAY);
+        
+        // Reset for next command
+        commandActive = 0;
+        Duration = 0;  // Optional: clear to prevent re-trigger
+        // Do not reset lastCalcTime here; it will be set on next parse
     }
-
-
-    // runMotor(Gear, Type, Velocity); //
-    // runMotor();
-    // Steer(Steering);
-
-
+    // If !commandActive, do nothing (idle, waiting for next message)
     /* -- Sample board code for User push-button in interrupt mode ---- */
     if (BspButtonState == BUTTON_PRESSED)
     {
