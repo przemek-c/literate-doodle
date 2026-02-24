@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <section name="Workbench">
 	<section name="org.eclipse.ui.texteditor.FindReplaceDialog">
-		<item key="selection" value="Found Velocity:"/>
+		<item key="selection" value="sendData"/>
 		<item key="wrap" value="true"/>
 		<item key="casesensitive" value="false"/>
 		<item key="wholeword" value="false"/>
 		<item key="incremental" value="false"/>
 		<item key="isRegEx" value="false"/>
 		<list key="findhistory">
+			<item value="sendData"/>
+			<item value="delay"/>
 			<item value="Found Velocity:"/>
 			<item value="origi"/>
 			<item value="doesn&apos;t st"/>
@@ -21,8 +23,6 @@
 			<item value="WHEEL_DIAMETER_M"/>
 			<item value="TIM2"/>
 			<item value="TIM3-&gt;CCR1"/>
-			<item value="TIM2-&gt;CCR2"/>
-			<item value="Lift"/>
 		</list>
 		<list key="replacehistory">
 		</list>

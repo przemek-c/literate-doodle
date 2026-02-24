@@ -28,7 +28,7 @@
 #include "lsm6dso32x_reg.h"
 #include <string.h>
 #include <stdlib.h>
-#include <stdio.h> // Ensure stdio.h is included for sprintf
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -43,36 +43,28 @@ typedef struct {
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-// IMU I2C address (LSM6DSO32X uses 0x6A or 0x6B depending on SDO pin; adjust if needed)
-#define IMU_ADDRESS (0x6A << 1)  // 7-bit address shifted left for HAL (0xD4)
+// Adres IMU (LSM6DSO32X) - 0x6A, dla funkcji HAL przesunięcie w lewo o 1 bit
+#define IMU_ADDRESS (0x6A << 1)
 
-// Expected WHO_AM_I value for LSM6DSO32X
+// Wartość WHO_AM_I dla LSM6DSO32X to 0x6C
 #define WHO_AM_I_VALUE 0x6C
 
-// Sensitivity factors for converting raw data to physical units
-/*
-#define ACCEL_SENSITIVITY 0.061f  // mg/LSB for ±2g full scale
-#define GYRO_SENSITIVITY 70.0f    // mdps/LSB for ±2000 dps full scale
-*/
-// Sensitivity factors (integer)
-#define ACCEL_SENSITIVITY_UG 244  // micro-g per LSB for ±8g range
-// #define GYRO_SENSITIVITY_MDPS 70  // mdps per LSB for ±2000 dps range
-#define GYRO_SENSITIVITY_UDPS 17500 // micro-dps per LSB for ±500 dps
+// Zmienne IMU
+#define ACCEL_SENSITIVITY_UG 244
+#define GYRO_SENSITIVITY_UDPS 17500
 
-// UART STAFF
+// Zmienne UART
 #define RX_BUFFER_SIZE 32
 #define START_MARKER '['
 #define END_MARKER ']'
 
-// Velocity calculation
-#define CALCULATION_INTERVAL_MS 100 // Calculate velocity every 100ms
-#define PULSES_PER_REVOLUTION 4 // Example: Encoder resolution
-#define WHEEL_DIAMETER_M 0.075 // Example: Wheel diameter in meters (75mm)
+// Zmienne pomiaru dystansu
+#define CALCULATION_INTERVAL_MS 100 
+#define PULSES_PER_REVOLUTION 4 // Rozdzielczość enkodera (4 impulsy na obrót)
+#define WHEEL_DIAMETER_M 0.075 // Średnica koła w metrach (75 mm)
 #define PI 3.1415926535f
 #define WHEEL_CIRCUMFERENCE_M (WHEEL_DIAMETER_M * PI)
-// #define RPS_THRESHOLD 0.05f // This will be replaced by the EMA filter
-#define MAX_RPS_THRESHOLD 10.0f // Maximum realistic RPS for sanity check
-#define EMA_ALPHA 0.1f // Smoothing factor for Exponential Moving Average filter (0.0 to 1.0)
+#define MAX_RPS_THRESHOLD 10.0f 
 
 /* USER CODE END PD */
 
@@ -91,44 +83,26 @@ uint8_t rxBuffer[RX_BUFFER_SIZE];
 volatile uint8_t rxIndex = 0;
 volatile uint8_t messageComplete = 0;
 
-// Variables to store parsed values
+// Flagi sterujące
 volatile char Steering = 'N';    // L/R/S/N (Left/Right/Straight/None)
 volatile char Gear = 'N';        // F/B/N (Forward/Backward/None)
-volatile char Type = 'N';        // A/D/C/N (Acceleration/Deceleration/Constant/None)
-volatile uint8_t Velocity = 0;   // 0-100
-volatile uint16_t Duration = 0;   // seconds, now up to 4 digits (0-9999)
-volatile uint8_t Controller = 0; // 0 or 1
+volatile uint16_t Duration = 0;   // Czas trwania manewru w ms
 volatile char Lifting = 'N';
 
-// State variable to track if a command is active
-volatile uint8_t commandActive = 0;  // 0: idle, 1: running motors
+// Zmienna do śledzenia, czy jest segment jest w trakcie wykonywania
+volatile uint8_t commandActive = 0;  // 0: oczekujący, 1: aktywny
 
-// motor controller
-// velocity calculation
+// Pomiar dystansu
 volatile uint32_t encoderPulseCount = 0;
 volatile float linear_mps = 0.0f;
 volatile float currentVelocity = 0.0f;
 volatile uint32_t lastPulseCount = 0;
 volatile uint32_t lastCalcTime = 0;
-float rps = 0.0f; // Initialize rps
+float rps = 0.0f;
 volatile float lastGoodVelocity = 0.0f;
-// volatile float WHEEL_DIAMETER_M = 0.070; // Example: Wheel diameter in meters (e.g., 65mm)
-// volatile float EMA_ALPHA = 0.25f;
 
 
-//PI Controller
-volatile float desiredVelocity = 0.0f;
-float Kp = 1.03f; // Proportional gain (NEEDS TUNING)
-float Ki = 0.027f;  // Integral gain (NEEDS TUNING)
-float integralTerm = 28.0f;
-float maxPWM = 80.0f; // Adjust based on selected Timer's ARR register value
-float minPWM = 0.0f; // int would be fine I guess
-float maxIntegral = 60.0f; // (maxPWM / 2) Example anti-windup limit (NEEDS TUNING)
 
-int tim3c1 = 0;
-int tim2c2 = 0;
-
-uint32_t test = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -139,42 +113,38 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-// Write to an IMU register
 void imu_write_register(uint8_t reg, uint8_t value) {
     HAL_I2C_Mem_Write(&hi2c1, IMU_ADDRESS, reg, I2C_MEMADD_SIZE_8BIT, &value, 1, 1000);
 }
 
-// Read from IMU registers
 void imu_read_registers(uint8_t reg, uint8_t *data, uint16_t len) {
     HAL_I2C_Mem_Read(&hi2c1, IMU_ADDRESS, reg, I2C_MEMADD_SIZE_8BIT, data, len, 1000);
 }
 
-// Initialize the IMU
+// Inicjalizacja IMU
 void imu_init(void) {
     uint8_t whoami;
-    imu_read_registers(0x0F, &whoami, 1);  // Read WHO_AM_I register
+    imu_read_registers(0x0F, &whoami, 1);
     if (whoami != WHO_AM_I_VALUE) {
-        printf("IMU not found: 0x%02X\n\r", whoami);
-        while (1);  // Hang if IMU not detected
+        printf("Nie wykryto układu IMU: 0x%02X\n\r", whoami);
+        while (1);
     }
-    imu_write_register(0x12, 0x40);  // CTRL3_C: Enable Block Data Update (BDU)
-    imu_write_register(0x10, 0x64);  // CTRL1_XL: 104 Hz, ±8g (was 0x60 for ±2g)
-    imu_write_register(0x11, 0x64);  // CTRL2_G: 104 Hz, ±500 dps (was 0x6C for ±2000 dps)
+    imu_write_register(0x12, 0x40);
+    imu_write_register(0x10, 0x64);
+    imu_write_register(0x11, 0x64);
 }
 
-// Read accelerometer data
 void imu_read_accel(imu_data_t *accel) {
     uint8_t buffer[6];
-    imu_read_registers(0x28, buffer, 6);  // OUTX_L_XL to OUTZ_H_XL
+    imu_read_registers(0x28, buffer, 6);
     accel->x = (int16_t)(buffer[0] | (buffer[1] << 8));
     accel->y = (int16_t)(buffer[2] | (buffer[3] << 8));
     accel->z = (int16_t)(buffer[4] | (buffer[5] << 8));
 }
 
-// Read gyroscope data
 void imu_read_gyro(imu_data_t *gyro) {
     uint8_t buffer[6];
-    imu_read_registers(0x22, buffer, 6);  // OUTX_L_G to OUTZ_H_G
+    imu_read_registers(0x22, buffer, 6);
     gyro->x = (int16_t)(buffer[0] | (buffer[1] << 8));
     gyro->y = (int16_t)(buffer[2] | (buffer[3] << 8));
     gyro->z = (int16_t)(buffer[4] | (buffer[5] << 8));
@@ -185,158 +155,95 @@ int32_t readGyroZ(){
     imu_read_accel(&accel);
     imu_read_gyro(&gyro);
 
-    // Compute scaled values using integer arithmetic
-    /*
-    int32_t accel_ug_x = (int32_t)accel.x * ACCEL_SENSITIVITY_UG;
-    int32_t accel_ug_y = (int32_t)accel.y * ACCEL_SENSITIVITY_UG;
-    int32_t accel_ug_z = (int32_t)accel.z * ACCEL_SENSITIVITY_UG;
-    int32_t gyro_udps_x = (int32_t)gyro.x * GYRO_SENSITIVITY_UDPS;
-    int32_t gyro_udps_y = (int32_t)gyro.y * GYRO_SENSITIVITY_UDPS;
-    int32_t gyro_udps_z = (int32_t)gyro.z * GYRO_SENSITIVITY_UDPS;
-    */
-
     return (int32_t)gyro.z * GYRO_SENSITIVITY_UDPS;
-
-    // printing
-    // printf("Accel [ug]: X=%ld, Y=%ld, Z=%ld\n\r",
-    //        accel_ug_x, accel_ug_y, accel_ug_z);
-    // printf("Gyro [mdps]: X=%ld, Y=%ld, Z=%ld\n\r",
-    //              gyro_udps_x, gyro_udps_y, gyro_udps_z);
 }
-
-// UART parsing message
-// there was a problem with first char so I change ptr++ to ptr += 2
-// and Python code sends two [[ but here it sees only one
-// weird but it works like that
 
 void parseMessage(char* msg) {
   if (!msg) {
-      printf("Error: Null message pointer\n\r");
+      printf("Zły format wiadomości\n\r");
       return;
   }
 
-  printf("Recived message: %s\n\r", msg);  // Debug original message
+  printf("Otrzymano wiadomość: %s\n\r", msg);
   char* ptr = msg;
-  printf("Current parsing position: '%s'\n\r", ptr);  // Show exactly what we're looking at
-
-  // First, let's check and skip the opening bracket
-  if (*ptr == '[') {
-      // ptr++;
-      ptr += 2;
-      printf("After bracket check, ptr points to: %s\n\r", ptr);
-  } else {
-      // printf("Error: Message doesn't start with [\n\r");
-      // ptr++;
-      ptr += 2;
-  }
+  ptr += 2;
   
-  printf("Current parsing position: '%s'\n\r", ptr);  // Show exactly what we're looking at
-
-  // Parse all fields in sequence
+  // Iteracja po wiadomości aż do znaku ']' lub końca stringa
   while (*ptr != ']' && *ptr != '\0') {
-      // printf("Current parsing position: '%s'\n\r", ptr);  // Show exactly what we're looking at
-      
-      // Print the first few characters for debugging
-      // printf("Next 3 chars: '%c%c%c'\n\r", ptr[0], ptr[1], ptr[2]);
-      
       if (strncmp(ptr, "S:", 2) == 0) {
-          ptr += 2;  // Skip "S:"
-          if (*ptr != '\0') {  // Safety check
+          ptr += 2;  // Pominięcie "S:"
+          if (*ptr != '\0') { 
               Steering = *ptr;
-              // printf("Found Steering: %c\n\r", Steering);
               ptr++;
           }
       }
       else if (strncmp(ptr, "G:", 2) == 0) {
-          ptr += 2;  // Skip "G:"
-          if (*ptr != '\0') {  // Safety check
+          ptr += 2;  // Pominięcie "G:"
+          if (*ptr != '\0') {
               Gear = *ptr;
-              // printf("Found Gear: %c\n\r", Gear);
               ptr++;
           }
       }
       
       else if (strncmp(ptr, "D:", 2) == 0) {
-          ptr += 2;  // Skip "D:"
+          ptr += 2;  // Pominięcie "D:"
           char* endPtr;
           long temp = strtol(ptr, &endPtr, 10);
           if (endPtr != ptr) {
-            // moving comma because of the float troubles in usart communication
         	  Duration = (uint16_t)temp;
-            // desiredVelocity = (float)temp / 10;
-            // printf("Found Duration: %d\n\r", Duration);
             ptr = endPtr;
           }
       }
 
       else if (strncmp(ptr, "L:", 2) == 0) {
-          ptr += 2;  // Skip "L:"
-          if (*ptr != '\0') {  // Safety check
+          ptr += 2;  // Pominięcie "L:"
+          if (*ptr != '\0') {
         	  Lifting = *ptr;
-              // printf("Found Lifting: %c\n\r", Lifting);
               ptr++;
           }
       }
 
-      // Skip comma if present
+      // Pominęcie przecinka
       if (*ptr == ',') {
         ptr++;
-        // printf("Skipped comma, now at: %s\n\r", ptr);
       }
   }
-
-  // In parseMessage() or after parsing, set commandActive = 1 and initialize lastCalcTime
-  // For example, at the end of parseMessage():
-
   
-  if (Steering == 'N' && Gear == 'N' && Lifting == 'N') {  // Only activate if Duration is valid
+  if (Steering == 'N' && Gear == 'N' && Lifting == 'N') {
     commandActive = 0;
   } 
   else {
     commandActive = 1;
-    lastCalcTime = HAL_GetTick();  // Start timing here
+    lastCalcTime = HAL_GetTick();
   }
   
   
-  printf("Final parsed values - S:%c G:%c D:%d L:%c\n\r",
-         // Steering, Gear, Type, Velocity, Duration);
+  printf("Przypisane flagi sterujące - S:%c G:%c D:%d L:%c\n\r",
 		  Steering, Gear, Duration, Lifting);
 }
 
 void sendDataToPlot(float desiredVelocity, float currentVelocity, float error, float output) {
-  // Scale floats to integers (e.g., multiply by 1000 to keep 3 decimal places)
   int32_t desiredV_scaled = (int32_t)(desiredVelocity * 1000.0f);
   int32_t currentV_scaled = (int32_t)(currentVelocity * 1000.0f);
   int32_t error_scaled = (int32_t)(error * 1000.0f);
-  int32_t output_scaled = (int32_t)(output * 1000.0f); // Scale output as well
+  int32_t output_scaled = (int32_t)(output * 1000.0f);
 
   int32_t gyro_udps_z = readGyroZ();
 
-  /*
-  // Print scaled integers using %ld format specifier for int32_t
-  printf("%lu,%ld,%ld,%ld,%ld,%ld\n",
-         HAL_GetTick(),      // Timestamp in milliseconds (uint32_t -> %lu)
-         desiredV_scaled,
-         currentV_scaled,
-         error_scaled,
-         output_scaled,
-		 gyro_udps_z);
-  */
-   // Buffer to hold the formatted string for USART1
-   char rpi_buffer[100]; // Adjust size if necessary, 100 should be safe for these values
+   // Bufor na wiadomość
+   char rpi_buffer[100];
 
-   // Format the string into rpi_buffer
+   // Formatowanie wiadomosci do wyslania przez USART1
    int len = sprintf(rpi_buffer, "%lu,%ld,%ld,%ld,%ld,%ld\n",
-                     HAL_GetTick(),      // Timestamp in milliseconds
+                     HAL_GetTick(),      // Millisekundy 
                      desiredV_scaled,
                      currentV_scaled,
                      error_scaled,
                      output_scaled,
                      gyro_udps_z);
  
-   // Transmit the formatted string via USART1 (huart1) to the Raspberry Pi
    if (len > 0) {
-     HAL_UART_Transmit(&huart1, (uint8_t*)rpi_buffer, len, HAL_MAX_DELAY); // Using huart1 for USART1
+     HAL_UART_Transmit(&huart1, (uint8_t*)rpi_buffer, len, HAL_MAX_DELAY);
    }
 
 }
@@ -344,19 +251,15 @@ void sendDataToPlot(float desiredVelocity, float currentVelocity, float error, f
 
 void PIcontroller(volatile float m_desiredVelocity, volatile float m_currentVelocity){
 
-	// Truncate current velocity to two decimal places for controller calculation
 	float current_velocity_truncated = (float)((int)(m_currentVelocity * 100.0f)) / 100.0f;
-
-	// Truncate desired velocity to two decimal places for controller calculation - weird behavior while debugging
 	float desired_velocity_truncated = (float)((int)(m_desiredVelocity * 100.0f)) / 100.0f;
-
-	// noise sounds like it work but the numbers those shows that for now
 
 	float error = desired_velocity_truncated - current_velocity_truncated;
 
 	float pTerm = Kp * error;
 	integralTerm += Ki * error * (CALCULATION_INTERVAL_MS / 1000.0f);
-	// Clamp integral term
+
+	// Ograniczenie całki (anti windup)
 	if (integralTerm > maxIntegral) integralTerm = maxIntegral;
 	else if (integralTerm < -maxIntegral) integralTerm = -maxIntegral;
 
@@ -367,30 +270,21 @@ void PIcontroller(volatile float m_desiredVelocity, volatile float m_currentVelo
 
 	// sendDataToPlot(m_desiredVelocity, m_currentVelocity, error, output);
 
-	// Timers configuration
-    TIM8->CCR2 = (uint32_t)output;
-    // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2); // Start PWM only once, not repeatedly here
+  TIM8->CCR2 = (uint32_t)output;
+
 }
 
-// void runMotor(char gear, char type, uint8_t velocity) {
+
 void Drive() {
-  //Gear = *gear;
+
 	HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
   switch (Gear)
   {
-  case 'F': // F in ASCII is 70
+  case 'F': // F w ASCII 70
 	  TIM2->CCR3 = 0;
-	//TIM8->CCR2 = 0; // calculating backward velocity
-    // motorForward
-    // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
-    // should I stop here the HAL_TIM_PWM timer for the backward move?
     if (Controller == 0) {
-      TIM8->CCR2 = 50; // Set a default PWM value for forward motion
-      // TIM2->CCR3 = 30; // calculating backward velocity
- 
-      // int m_error = 0;
-      // int m_output = 0;
+      TIM8->CCR2 = 50;
       // sendDataToPlot(desiredVelocity, currentVelocity, 0, 50);
     }
     else if (Controller == 1) {
@@ -398,53 +292,41 @@ void Drive() {
     }
     else {
       TIM8->CCR2 = 0;
-      currentVelocity = 0;
     }
 
     break;
   case 'B': // 66
-	  // motorBackward
 	  TIM8->CCR2 = 0;
 	  TIM2->CCR3 = 30;
-	  // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
 	  break;
   default:
     TIM8->CCR2 = 0;
     TIM2->CCR3 = 0;
-    // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
-    currentVelocity = 0;
-    lastGoodVelocity = 0;
     break;
   }
 }
 
 void Steer() {
-	int PWMtoSteer = 75;
-  //Gear = *gear;
+
+	int PWMtoSteer = 100;
   
     switch (Steering)
     {
     case 'L': // 76
-    	// one to zero
         TIM3->CCR2 = 0;
         HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
-    	// second to run
         TIM4->CCR1 = PWMtoSteer;
         HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
       break;
     case 'R': // 82
-    	// one to zero
         TIM4->CCR1 = 0;
         HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
-    	// second to run
         TIM3->CCR2 = PWMtoSteer;
         HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
       break;
     default:
-    	// both to zero
         TIM4->CCR1 = 0;
         HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
-    	// both to zero
         TIM3->CCR2 = 0;
         HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
       break;
@@ -452,77 +334,55 @@ void Steer() {
 }
 
 void Lift(){
-	// HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
-	// HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
-	/*
-    TIM17->CCR1 = tim2c2; // Ensure other motor is off
-    HAL_TIM_PWM_Start(&htim17, TIM_CHANNEL_1); // Start PWM for TIM2 CH2
-
-    TIM1->CCR3 = tim3c1; // Ensure other motor is off
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3); // Start PWM for TIM3 CH1
-    */
 	switch(Lifting)
 	{
     case 'U': // 85
-    	TIM17->CCR1 = 0; // Ensure other motor is off
-        HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3); // Start PWM for TIM3 CH1
+    	TIM17->CCR1 = 0;
+        HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
         TIM1->CCR3 = 30;
 
-        HAL_Delay(2000); // This will block other operations
+        HAL_Delay(2000);
         TIM1->CCR3 = 0;
-        HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_3); // Stop PWM after action
-        Lifting = 'N'; // Reset state after action to prevent re-triggering
-        break; // Added break
+        HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_3);
+        Lifting = 'N';
+        break;
     case 'D': // 68
-    	TIM1->CCR3 = 0; // Ensure other motor is off
-        HAL_TIM_PWM_Start(&htim17, TIM_CHANNEL_1); // Start PWM for TIM2 CH2
+    	TIM1->CCR3 = 0;
+        HAL_TIM_PWM_Start(&htim17, TIM_CHANNEL_1);
         TIM17->CCR1 = 30;
 
-        HAL_Delay(2000); // This will block other operations
+        HAL_Delay(2000);
         TIM17->CCR1 = 0;
-        HAL_TIM_PWM_Stop(&htim17, TIM_CHANNEL_1); // Stop PWM after action
-        Lifting = 'N'; // Reset state after action to prevent re-triggering
-        break; // Added break
+        HAL_TIM_PWM_Stop(&htim17, TIM_CHANNEL_1);
+        Lifting = 'N';
+        break;
     default:
-        // Ensure both are off and PWMs are stopped if not already
         if (TIM1->CCR3 != 0) {
         	TIM1->CCR3 = 0;
         }
-        // Optional: Stop PWM if you want to ensure it's fully off,
-        // otherwise setting CCR to 0 is often sufficient.
-        // HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_1);
 
         if (TIM17->CCR1 != 0) {
         	TIM17->CCR1 = 0;
         }
-        // HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_2);
       break;
 	}
 }
 
 void calculateDistance() {
-    // Calculate distance per pulse: circumference divided by pulses per revolution
     float distance_per_pulse = WHEEL_CIRCUMFERENCE_M / PULSES_PER_REVOLUTION;
     
-    // Calculate total distance traveled based on accumulated pulses
     float distance = (float)encoderPulseCount * distance_per_pulse * 1000;
     
+    // Wysłanie wiadomości o dystansie przez UART
     int distanceINT = (int) distance;
-    // Print the calculated distance (you can modify this to send via UART if needed)
-    printf("Distance traveled: 0,%d m\n\r", distanceINT);
-    
-    // Send distance via UART to Pi (without interfering with the '1\n' signal)
-    char distance_buffer[50];  // Buffer for the distance message
-    int len = sprintf(distance_buffer, "Distance: %d\n", distanceINT);
+    char distance_buffer[50];
+    int len = sprintf(distance_buffer, "Dystans: %d\n", distanceINT);
     if (len > 0) {
         HAL_UART_Transmit(&huart1, (uint8_t*)distance_buffer, len, HAL_MAX_DELAY);
     }
-    // Reset encoder pulse count for the next command
+    // Wyzerowanie enkodera
     encoderPulseCount = 0;
 }
-
-
-
 
 
 /* USER CODE END 0 */
@@ -576,7 +436,7 @@ int main(void)
   /* Initialize USER push-button, will be used to trigger an interrupt each time it's pressed.*/
   BSP_PB_Init(BUTTON_USER, BUTTON_MODE_EXTI);
 
-  /* Initialize COM1 port (115200, 8 bits (7-bit data + 1 stop bit), no parity */
+  /* Inicializacja COM1 port (115200, 8 bits (7-bit data + 1 stop bit), no parity */
   BspCOMInit.BaudRate   = 115200;
   BspCOMInit.WordLength = COM_WORDLENGTH_8B;
   BspCOMInit.StopBits   = COM_STOPBITS_1;
@@ -589,14 +449,13 @@ int main(void)
 
   /* USER CODE BEGIN BSP */
 
-  /* -- Sample board code to send message over COM1 port ---- */
-  // printf("Welcome to STM32 world !\n\r");
+  // Test wysyłania wiadomości COM1 port
+  // printf("Hello world !\n\r");
 
   /* -- Sample board code to switch on leds ---- */
   BSP_LED_On(LED_GREEN);
 
-  imu_init();  // Initialize the IMU after peripherals are set up
-
+  imu_init();  // Inicjalizacja IMU
 
   /* USER CODE END BSP */
 
@@ -605,45 +464,41 @@ int main(void)
   while (1)
   {
     if (messageComplete) {
-        // printf("Pulses counted: %ld\n\r", encoderPulseCount);
         parseMessage((char*)rxBuffer);
         messageComplete = 0;
-        // Note: commandActive is set inside parseMessage() as above
     }
 
     uint32_t now = HAL_GetTick();
-    // test = now - lastCalcTime;
     
     if (commandActive && (now - lastCalcTime < Duration)) {
-        // Still within Duration: run motors
         Drive();
         Steer();
         Lift();
-        // Do NOT reset lastCalcTime here
+        sendDataToPlot(0,0,0,0); // atrybuty 0, ponieważ zrezygnowano z regulacji prędkości
+
     } else if (commandActive) {
-        // Duration expired: stop motors, send signal to Pi, reset
-        // Stop motors explicitly (set to neutral)
-    	  // lastCalcTime = now;
         Gear = 'N';
         Steering = 'N';
         Lifting = 'N';
-        Drive();  // This will set PWM to 0 based on 'N'
+        Drive();
         Steer();
         Lift();
         
-        // Send '1' to Pi (with newline for reliability)
-        char signal[3] = "1\n";  // Buffer for the signal
+        HAL_Delay(500);
+
+        // Wysłanie znaku '1' do RPi oznaczającego koniec danego manewru
+        char signal[3] = "1\n";  // Bufor wiadomości
         HAL_UART_Transmit(&huart1, (uint8_t*)signal, strlen(signal), HAL_MAX_DELAY);
 
-        calculateDistance(); // final distance calculation
+        calculateDistance();
         
-        // Reset for next command
+        // Reset
         commandActive = 0;
-        Duration = 0;  // Optional: clear to prevent re-trigger
-        // Do not reset lastCalcTime here; it will be set on next parse
+        Duration = 0;
+
     }
-    // If !commandActive, do nothing (idle, waiting for next message)
-    /* -- Sample board code for User push-button in interrupt mode ---- */
+
+    //Część testowa z działania układów peryferyjnych z wykorzystaniem przycisku 
     if (BspButtonState == BUTTON_PRESSED)
     {
       /* Update button state */
@@ -652,8 +507,7 @@ int main(void)
       BSP_LED_Toggle(LED_GREEN);
 
       /* ..... Perform your action ..... */
-      printf("Let's do this !\n\r");
-      // grok code starts
+      printf("Hello World!\n\r");
       // readIMU();
 
       imu_data_t accel, gyro;
@@ -738,31 +592,26 @@ void SystemClock_Config(void)
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
   if (huart->Instance == USART1) {
       if (rxIndex == 0 && rxBuffer[0] != START_MARKER) {
-          // Wait for start marker
           HAL_UART_Receive_IT(&huart1, &rxBuffer[0], 1);
           return;
       }
       
       if (rxBuffer[rxIndex] == END_MARKER) {
-          // Message complete
-          rxBuffer[rxIndex + 1] = '\0';  // Null terminate
+          rxBuffer[rxIndex + 1] = '\0';
           messageComplete = 1;
           rxIndex = 0;
       } else if (rxIndex < RX_BUFFER_SIZE - 2) {
           rxIndex++;
       }
       
-      // Continue receiving
       HAL_UART_Receive_IT(&huart1, &rxBuffer[rxIndex], 1);
   }
 }
 
-// motor controller EXTI handler
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-    if (GPIO_Pin == GPIO_PIN_9) { // Check if it's PA9's interrupt
+    if (GPIO_Pin == GPIO_PIN_9) { // Przerwanie od enkodera
         encoderPulseCount++;
         BSP_LED_Toggle(LED_GREEN);
-        // printf("Pulses counted: %ld\n\r", encoderPulseCount);
     }
 }
 /* USER CODE END 4 */

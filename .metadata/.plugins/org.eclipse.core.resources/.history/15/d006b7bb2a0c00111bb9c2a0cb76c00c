@@ -95,16 +95,14 @@ volatile uint8_t messageComplete = 0;
 volatile char Steering = 'N';    // L/R/S/N (Left/Right/Straight/None)
 volatile char Gear = 'N';        // F/B/N (Forward/Backward/None)
 volatile char Type = 'N';        // A/D/C/N (Acceleration/Deceleration/Constant/None)
-volatile uint8_t Velocity = 0;   // 0-100
 volatile uint16_t Duration = 0;   // seconds, now up to 4 digits (0-9999)
-volatile uint8_t Controller = 0; // 0 or 1
 volatile char Lifting = 'N';
 
 // State variable to track if a command is active
 volatile uint8_t commandActive = 0;  // 0: idle, 1: running motors
 
 // motor controller
-// velocity calculation
+// distance calculation
 volatile uint32_t encoderPulseCount = 0;
 volatile float linear_mps = 0.0f;
 volatile float currentVelocity = 0.0f;
@@ -112,21 +110,9 @@ volatile uint32_t lastPulseCount = 0;
 volatile uint32_t lastCalcTime = 0;
 float rps = 0.0f; // Initialize rps
 volatile float lastGoodVelocity = 0.0f;
-// volatile float WHEEL_DIAMETER_M = 0.070; // Example: Wheel diameter in meters (e.g., 65mm)
-// volatile float EMA_ALPHA = 0.25f;
 
 
-//PI Controller
-volatile float desiredVelocity = 0.0f;
-float Kp = 1.03f; // Proportional gain (NEEDS TUNING)
-float Ki = 0.027f;  // Integral gain (NEEDS TUNING)
-float integralTerm = 28.0f;
-float maxPWM = 80.0f; // Adjust based on selected Timer's ARR register value
-float minPWM = 0.0f; // int would be fine I guess
-float maxIntegral = 60.0f; // (maxPWM / 2) Example anti-windup limit (NEEDS TUNING)
 
-int tim3c1 = 0;
-int tim2c2 = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -205,7 +191,7 @@ int32_t readGyroZ(){
 // UART parsing message
 // there was a problem with first char so I change ptr++ to ptr += 2
 // and Python code sends two [[ but here it sees only one
-// weird but it works like that
+
 
 void parseMessage(char* msg) {
   if (!msg) {
@@ -241,7 +227,7 @@ void parseMessage(char* msg) {
           ptr += 2;  // Skip "S:"
           if (*ptr != '\0') {  // Safety check
               Steering = *ptr;
-              printf("Found Steering: %c\n\r", Steering);
+              // printf("Found Steering: %c\n\r", Steering);
               ptr++;
           }
       }
@@ -249,7 +235,7 @@ void parseMessage(char* msg) {
           ptr += 2;  // Skip "G:"
           if (*ptr != '\0') {  // Safety check
               Gear = *ptr;
-              printf("Found Gear: %c\n\r", Gear);
+              // printf("Found Gear: %c\n\r", Gear);
               ptr++;
           }
       }
@@ -262,7 +248,7 @@ void parseMessage(char* msg) {
             // moving comma because of the float troubles in usart communication
         	  Duration = (uint16_t)temp;
             // desiredVelocity = (float)temp / 10;
-            printf("Found Duration: %d\n\r", Duration);
+            // printf("Found Duration: %d\n\r", Duration);
             ptr = endPtr;
           }
       }
@@ -271,7 +257,7 @@ void parseMessage(char* msg) {
           ptr += 2;  // Skip "L:"
           if (*ptr != '\0') {  // Safety check
         	  Lifting = *ptr;
-              printf("Found Lifting: %c\n\r", Lifting);
+              // printf("Found Lifting: %c\n\r", Lifting);
               ptr++;
           }
       }
@@ -279,25 +265,21 @@ void parseMessage(char* msg) {
       // Skip comma if present
       if (*ptr == ',') {
         ptr++;
-        printf("Skipped comma, now at: %s\n\r", ptr);
+        // printf("Skipped comma, now at: %s\n\r", ptr);
       }
   }
 
-  // In parseMessage() or after parsing, set commandActive = 1 and initialize lastCalcTime
-  // For example, at the end of parseMessage():
-
   
-  if (Steering == 'N' && Gear == 'N' && Lifting == 'N') {  // Only activate if Duration is valid
+  if (Steering == 'N' && Gear == 'N' && Lifting == 'N') {
     commandActive = 0;
   } 
   else {
     commandActive = 1;
-    lastCalcTime = HAL_GetTick();  // Start timing here
+    lastCalcTime = HAL_GetTick();
   }
   
   
   printf("Final parsed values - S:%c G:%c D:%d L:%c\n\r",
-         // Steering, Gear, Type, Velocity, Duration);
 		  Steering, Gear, Duration, Lifting);
 }
 
@@ -310,16 +292,6 @@ void sendDataToPlot(float desiredVelocity, float currentVelocity, float error, f
 
   int32_t gyro_udps_z = readGyroZ();
 
-  /*
-  // Print scaled integers using %ld format specifier for int32_t
-  printf("%lu,%ld,%ld,%ld,%ld,%ld\n",
-         HAL_GetTick(),      // Timestamp in milliseconds (uint32_t -> %lu)
-         desiredV_scaled,
-         currentV_scaled,
-         error_scaled,
-         output_scaled,
-		 gyro_udps_z);
-  */
    // Buffer to hold the formatted string for USART1
    char rpi_buffer[100]; // Adjust size if necessary, 100 should be safe for these values
 
@@ -348,7 +320,6 @@ void PIcontroller(volatile float m_desiredVelocity, volatile float m_currentVelo
 	// Truncate desired velocity to two decimal places for controller calculation - weird behavior while debugging
 	float desired_velocity_truncated = (float)((int)(m_desiredVelocity * 100.0f)) / 100.0f;
 
-	// noise sounds like it work but the numbers those shows that for now
 
 	float error = desired_velocity_truncated - current_velocity_truncated;
 
@@ -363,33 +334,27 @@ void PIcontroller(volatile float m_desiredVelocity, volatile float m_currentVelo
 	if (output > maxPWM) output = maxPWM;
 	else if (output < minPWM) output = minPWM;
 
-	sendDataToPlot(m_desiredVelocity, m_currentVelocity, error, output);
+	// sendDataToPlot(m_desiredVelocity, m_currentVelocity, error, output);
 
 	// Timers configuration
     TIM8->CCR2 = (uint32_t)output;
-    // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2); // Start PWM only once, not repeatedly here
+
 }
 
-// void runMotor(char gear, char type, uint8_t velocity) {
+
 void Drive() {
-  //Gear = *gear;
+
 	HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
   switch (Gear)
   {
   case 'F': // F in ASCII is 70
 	  TIM2->CCR3 = 0;
-	//TIM8->CCR2 = 0; // calculating backward velocity
-    // motorForward
-    // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
-    // should I stop here the HAL_TIM_PWM timer for the backward move?
     if (Controller == 0) {
-      TIM8->CCR2 = 50; // Set a default PWM value for forward motion
-      // TIM2->CCR3 = 30; // calculating backward velocity
- 
-      // int m_error = 0;
-      // int m_output = 0;
-      sendDataToPlot(desiredVelocity, currentVelocity, 0, 50);   }
+      TIM8->CCR2 = 50;
+
+      // sendDataToPlot(desiredVelocity, currentVelocity, 0, 50);
+    }
     else if (Controller == 1) {
       PIcontroller(desiredVelocity, currentVelocity);
     }
@@ -400,15 +365,12 @@ void Drive() {
 
     break;
   case 'B': // 66
-	  // motorBackward
 	  TIM8->CCR2 = 0;
 	  TIM2->CCR3 = 30;
-	  // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
 	  break;
   default:
     TIM8->CCR2 = 0;
     TIM2->CCR3 = 0;
-    // HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
     currentVelocity = 0;
     lastGoodVelocity = 0;
     break;
@@ -416,32 +378,26 @@ void Drive() {
 }
 
 void Steer() {
-	int PWMtoSteer = 75;
-  //Gear = *gear;
+
+	int PWMtoSteer = 100;
   
     switch (Steering)
     {
     case 'L': // 76
-    	// one to zero
         TIM3->CCR2 = 0;
         HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
-    	// second to run
         TIM4->CCR1 = PWMtoSteer;
         HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
       break;
     case 'R': // 82
-    	// one to zero
         TIM4->CCR1 = 0;
         HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
-    	// second to run
         TIM3->CCR2 = PWMtoSteer;
         HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
       break;
     default:
-    	// both to zero
         TIM4->CCR1 = 0;
         HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
-    	// both to zero
         TIM3->CCR2 = 0;
         HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
       break;
@@ -449,56 +405,60 @@ void Steer() {
 }
 
 void Lift(){
-	// HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
-	// HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
-	/*
-    TIM17->CCR1 = tim2c2; // Ensure other motor is off
-    HAL_TIM_PWM_Start(&htim17, TIM_CHANNEL_1); // Start PWM for TIM2 CH2
-
-    TIM1->CCR3 = tim3c1; // Ensure other motor is off
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3); // Start PWM for TIM3 CH1
-    */
 	switch(Lifting)
 	{
     case 'U': // 85
-    	TIM17->CCR1 = 0; // Ensure other motor is off
-        HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3); // Start PWM for TIM3 CH1
+    	TIM17->CCR1 = 0;
+        HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
         TIM1->CCR3 = 30;
 
-        HAL_Delay(2000); // This will block other operations
+        HAL_Delay(2000);
         TIM1->CCR3 = 0;
-        HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_3); // Stop PWM after action
-        Lifting = 'N'; // Reset state after action to prevent re-triggering
-        break; // Added break
+        HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_3);
+        Lifting = 'N';
+        break;
     case 'D': // 68
-    	TIM1->CCR3 = 0; // Ensure other motor is off
-        HAL_TIM_PWM_Start(&htim17, TIM_CHANNEL_1); // Start PWM for TIM2 CH2
+    	TIM1->CCR3 = 0;
+        HAL_TIM_PWM_Start(&htim17, TIM_CHANNEL_1);
         TIM17->CCR1 = 30;
 
-        HAL_Delay(2000); // This will block other operations
+        HAL_Delay(2000);
         TIM17->CCR1 = 0;
-        HAL_TIM_PWM_Stop(&htim17, TIM_CHANNEL_1); // Stop PWM after action
-        Lifting = 'N'; // Reset state after action to prevent re-triggering
-        break; // Added break
+        HAL_TIM_PWM_Stop(&htim17, TIM_CHANNEL_1);
+        Lifting = 'N';
+        break;
     default:
-        // Ensure both are off and PWMs are stopped if not already
         if (TIM1->CCR3 != 0) {
         	TIM1->CCR3 = 0;
         }
-        // Optional: Stop PWM if you want to ensure it's fully off,
-        // otherwise setting CCR to 0 is often sufficient.
-        // HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_1);
 
         if (TIM17->CCR1 != 0) {
         	TIM17->CCR1 = 0;
         }
-        // HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_2);
       break;
 	}
 }
 
-
-
+void calculateDistance() {
+    // Calculate distance per pulse: circumference divided by pulses per revolution
+    float distance_per_pulse = WHEEL_CIRCUMFERENCE_M / PULSES_PER_REVOLUTION;
+    
+    // Calculate total distance traveled based on accumulated pulses
+    float distance = (float)encoderPulseCount * distance_per_pulse * 1000;
+    
+    int distanceINT = (int) distance;
+    // Print the calculated distance (you can modify this to send via UART if needed)
+    printf("Distance traveled: 0,%d m\n\r", distanceINT);
+    
+    // Send distance via UART to Pi (without interfering with the '1\n' signal)
+    char distance_buffer[50];  // Buffer for the distance message
+    int len = sprintf(distance_buffer, "Distance: %d\n", distanceINT);
+    if (len > 0) {
+        HAL_UART_Transmit(&huart1, (uint8_t*)distance_buffer, len, HAL_MAX_DELAY);
+    }
+    // Reset encoder pulse count for the next command
+    encoderPulseCount = 0;
+}
 
 
 /* USER CODE END 0 */
@@ -552,7 +512,7 @@ int main(void)
   /* Initialize USER push-button, will be used to trigger an interrupt each time it's pressed.*/
   BSP_PB_Init(BUTTON_USER, BUTTON_MODE_EXTI);
 
-  /* Initialize COM1 port (115200, 8 bits (7-bit data + 1 stop bit), no parity */
+  /* Inicializacja COM1 port (115200, 8 bits (7-bit data + 1 stop bit), no parity */
   BspCOMInit.BaudRate   = 115200;
   BspCOMInit.WordLength = COM_WORDLENGTH_8B;
   BspCOMInit.StopBits   = COM_STOPBITS_1;
@@ -565,13 +525,13 @@ int main(void)
 
   /* USER CODE BEGIN BSP */
 
-  /* -- Sample board code to send message over COM1 port ---- */
-  // printf("Welcome to STM32 world !\n\r");
+  /* -- Test wysyłania wiadomości COM1 port ---- */
+  // printf("Hello world !\n\r");
 
   /* -- Sample board code to switch on leds ---- */
   BSP_LED_On(LED_GREEN);
 
-  imu_init();  // Initialize the IMU after peripherals are set up
+  imu_init();  // Inicjalizacja IMU
 
 
   /* USER CODE END BSP */
@@ -581,42 +541,41 @@ int main(void)
   while (1)
   {
     if (messageComplete) {
-        printf("Pulses counted: %ld\n\r", encoderPulseCount);
         parseMessage((char*)rxBuffer);
         messageComplete = 0;
-        // Note: commandActive is set inside parseMessage() as above
     }
 
     uint32_t now = HAL_GetTick();
-    test = now - lastCalcTime;
     
     if (commandActive && (now - lastCalcTime < Duration)) {
-        // Still within Duration: run motors
         Drive();
         Steer();
         Lift();
-        // Do NOT reset lastCalcTime here
+        sendDataToPlot(0,0,0,0); // pominięcie poprzedniego pomiaru prędkości do regulacji
+
     } else if (commandActive) {
-        // Duration expired: stop motors, send signal to Pi, reset
-        // Stop motors explicitly (set to neutral)
         Gear = 'N';
         Steering = 'N';
         Lifting = 'N';
-        Drive();  // This will set PWM to 0 based on 'N'
+        Drive();
         Steer();
         Lift();
         
-        // Send '1' to Pi (with newline for reliability)
-        char signal[3] = "1\n";  // Buffer for the signal
+        HAL_Delay(500);
+
+        // Wysłanie znaku '1' do RPi oznaczającego koniec manewru
+        char signal[3] = "1\n";  // Bufor
         HAL_UART_Transmit(&huart1, (uint8_t*)signal, strlen(signal), HAL_MAX_DELAY);
+
+        calculateDistance();
         
-        // Reset for next command
+        // Reset
         commandActive = 0;
-        Duration = 0;  // Optional: clear to prevent re-trigger
-        // Do not reset lastCalcTime here; it will be set on next parse
+        Duration = 0;
+
     }
-    // If !commandActive, do nothing (idle, waiting for next message)
-    /* -- Sample board code for User push-button in interrupt mode ---- */
+
+    /* -- Część testowa z działania pomiarów ---- */
     if (BspButtonState == BUTTON_PRESSED)
     {
       /* Update button state */

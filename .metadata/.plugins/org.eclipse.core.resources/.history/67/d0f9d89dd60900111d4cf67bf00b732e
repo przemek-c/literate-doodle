@@ -243,7 +243,7 @@ void parseMessage(char* msg) {
           ptr += 2;  // Skip "S:"
           if (*ptr != '\0') {  // Safety check
               Steering = *ptr;
-              printf("Found Steering: %c\n\r", Steering);
+              // printf("Found Steering: %c\n\r", Steering);
               ptr++;
           }
       }
@@ -251,7 +251,7 @@ void parseMessage(char* msg) {
           ptr += 2;  // Skip "G:"
           if (*ptr != '\0') {  // Safety check
               Gear = *ptr;
-              printf("Found Gear: %c\n\r", Gear);
+              // printf("Found Gear: %c\n\r", Gear);
               ptr++;
           }
       }
@@ -264,7 +264,7 @@ void parseMessage(char* msg) {
             // moving comma because of the float troubles in usart communication
         	  Duration = (uint16_t)temp;
             // desiredVelocity = (float)temp / 10;
-            printf("Found Duration: %d\n\r", Duration);
+            // printf("Found Duration: %d\n\r", Duration);
             ptr = endPtr;
           }
       }
@@ -273,7 +273,7 @@ void parseMessage(char* msg) {
           ptr += 2;  // Skip "L:"
           if (*ptr != '\0') {  // Safety check
         	  Lifting = *ptr;
-              printf("Found Lifting: %c\n\r", Lifting);
+              // printf("Found Lifting: %c\n\r", Lifting);
               ptr++;
           }
       }
@@ -281,7 +281,7 @@ void parseMessage(char* msg) {
       // Skip comma if present
       if (*ptr == ',') {
         ptr++;
-        printf("Skipped comma, now at: %s\n\r", ptr);
+        // printf("Skipped comma, now at: %s\n\r", ptr);
       }
   }
 
@@ -365,7 +365,7 @@ void PIcontroller(volatile float m_desiredVelocity, volatile float m_currentVelo
 	if (output > maxPWM) output = maxPWM;
 	else if (output < minPWM) output = minPWM;
 
-	sendDataToPlot(m_desiredVelocity, m_currentVelocity, error, output);
+	// sendDataToPlot(m_desiredVelocity, m_currentVelocity, error, output);
 
 	// Timers configuration
     TIM8->CCR2 = (uint32_t)output;
@@ -391,7 +391,8 @@ void Drive() {
  
       // int m_error = 0;
       // int m_output = 0;
-      sendDataToPlot(desiredVelocity, currentVelocity, 0, 50);   }
+      // sendDataToPlot(desiredVelocity, currentVelocity, 0, 50);
+    }
     else if (Controller == 1) {
       PIcontroller(desiredVelocity, currentVelocity);
     }
@@ -418,7 +419,7 @@ void Drive() {
 }
 
 void Steer() {
-	int PWMtoSteer = 75;
+	int PWMtoSteer = 100;
   //Gear = *gear;
   
     switch (Steering)
@@ -499,6 +500,27 @@ void Lift(){
 	}
 }
 
+void calculateDistance() {
+    // Calculate distance per pulse: circumference divided by pulses per revolution
+    float distance_per_pulse = WHEEL_CIRCUMFERENCE_M / PULSES_PER_REVOLUTION;
+    
+    // Calculate total distance traveled based on accumulated pulses
+    float distance = (float)encoderPulseCount * distance_per_pulse * 1000;
+    
+    int distanceINT = (int) distance;
+    // Print the calculated distance (you can modify this to send via UART if needed)
+    printf("Distance traveled: 0,%d m\n\r", distanceINT);
+    
+    // Send distance via UART to Pi (without interfering with the '1\n' signal)
+    char distance_buffer[50];  // Buffer for the distance message
+    int len = sprintf(distance_buffer, "Distance: %d\n", distanceINT);
+    if (len > 0) {
+        HAL_UART_Transmit(&huart1, (uint8_t*)distance_buffer, len, HAL_MAX_DELAY);
+    }
+    // Reset encoder pulse count for the next command
+    encoderPulseCount = 0;
+}
+
 
 
 
@@ -573,7 +595,7 @@ int main(void)
   /* -- Sample board code to switch on leds ---- */
   BSP_LED_On(LED_GREEN);
 
-  imu_init();  // Initialize the IMU after peripherals are set up
+  imu_init();  // Inicjalizacja IMU
 
 
   /* USER CODE END BSP */
@@ -583,34 +605,33 @@ int main(void)
   while (1)
   {
     if (messageComplete) {
-        printf("Pulses counted: %ld\n\r", encoderPulseCount);
         parseMessage((char*)rxBuffer);
         messageComplete = 0;
-        // Note: commandActive is set inside parseMessage() as above
     }
 
     uint32_t now = HAL_GetTick();
-    test = now - lastCalcTime;
     
     if (commandActive && (now - lastCalcTime < Duration)) {
-        // Still within Duration: run motors
         Drive();
         Steer();
         Lift();
-        // Do NOT reset lastCalcTime here
+        sendDataToPlot(0,0,0,0); // pominięcie poprzedniego pomiaru prędkości do regulacji
+
     } else if (commandActive) {
-        // Duration expired: stop motors, send signal to Pi, reset
-        // Stop motors explicitly (set to neutral)
         Gear = 'N';
         Steering = 'N';
         Lifting = 'N';
-        Drive();  // This will set PWM to 0 based on 'N'
+        Drive();
         Steer();
         Lift();
         
-        // Send '1' to Pi (with newline for reliability)
-        char signal[3] = "1\n";  // Buffer for the signal
+        HAL_Delay(500);
+
+        // Wysłanie znaku '1' do RPi oznaczającego koniec manewru
+        char signal[3] = "1\n";  // Bufor
         HAL_UART_Transmit(&huart1, (uint8_t*)signal, strlen(signal), HAL_MAX_DELAY);
+
+        calculateDistance(); // final distance calculation
         
         // Reset for next command
         commandActive = 0;
